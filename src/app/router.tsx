@@ -1,5 +1,5 @@
 
-import { createBrowserRouter, Outlet } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 
 import { Login } from "../features/auth/pages/Login";
 import { Register } from "../features/auth/pages/Register";
@@ -31,6 +31,14 @@ import { BuyerCart } from "../features/cart/pages/BuyerCart";
 import { BuyerPurchases } from "../features/purchases/pages/BuyerPurchases";
 import { BuyerPurchaseDetails } from "../features/purchases/pages/BuyerPurchaseDetails";
 import { ApiBuyerCatalog, ApiBuyerProductDetails, ApiBuyerCart, ApiBuyerPurchases, ApiBuyerPurchaseDetails } from "../features/buyer/api/BuyerPages";
+import { AdminLayout } from "../features/admin/layout/AdminLayout";
+import { AdminAccount, AdminCatalog, AdminOverview, AdminProductCreate } from "../features/admin/pages/AdminPages";
+import { useAuth } from "../features/auth/hooks/useAuth";
+
+function ApiHome() {
+  const { user } = useAuth();
+  return user?.role === "ROTALOG_ADMIN" ? <Navigate to="/admin" replace /> : <ApiBuyerCatalog />;
+}
 
 export const router = createBrowserRouter([
   // Marketplace público e portal do comprador
@@ -41,7 +49,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: authMode === "api" ? <ApiBuyerCatalog /> : <ProductCatalog />,
+        element: authMode === "api" ? <ApiHome /> : <ProductCatalog />,
       },
       {
         path: "produto/:productId",
@@ -88,6 +96,26 @@ export const router = createBrowserRouter([
   {
     path: "/cadastro",
     element: <Register />,
+  },
+
+  // Portal administrativo do catálogo canônico
+  {
+    path: "/admin",
+    element: (
+      <ProtectedRoute allowedRoles={["ROTALOG_ADMIN"]} capability="catalog:read">
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
+    errorElement: <NotFoundPage />,
+    children: [
+      { index: true, element: <AdminOverview /> },
+      { path: "products", element: <AdminCatalog /> },
+      {
+        path: "products/new",
+        element: <ProtectedRoute allowedRoles={["ROTALOG_ADMIN"]} capability="product:write"><AdminProductCreate /></ProtectedRoute>,
+      },
+      { path: "account", element: <AdminAccount /> },
+    ],
   },
 
   // Portal do fornecedor

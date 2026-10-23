@@ -273,7 +273,6 @@ export function AppLayout() {
             </div>
           ) : (
             <>
-              <p className="supplier-environment">{apiMode ? "Ambiente de demonstração · Dados sintéticos consultados na API" : "Ambiente de demonstração · Dados locais simulados"}</p>
               <Outlet context={{ activeOrganization }} />
             </>
           )}

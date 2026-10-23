@@ -73,12 +73,15 @@ test('saldos oficiais, físico nulo, reservado, zero e vínculos não resolvidos
     await expect(page.getByRole('columnheader')).toHaveCount(6);
     await page.screenshot({path:testInfo.outputPath('estoque-simplificado.png'),fullPage:true});
     await row.getByText('Detalhes do estoque',{exact:true}).click();await expect(row.getByText('Não informado',{exact:true})).toBeVisible();
+    await expect(row.getByText('offer-0',{exact:true})).toHaveCount(0);
+    await expect(row.getByText('warehouse',{exact:true})).toHaveCount(0);
+    await expect(row.getByText(/versão/i)).toHaveCount(0);
     await expect(row.getByText('20',{exact:true})).toBeVisible();
     await expect(row.getByRole('cell',{name:'3',exact:true})).toBeVisible();
     await expect(row.getByText('Com disponibilidade',{exact:true})).toBeVisible();
     await expect(page.getByText('Sem disponibilidade',{exact:true})).toBeVisible();
     await expect(page.getByRole('cell',{name:/Produto não disponível na consulta de ofertas ativas/})).toBeVisible();
-    await expect(page.getByLabel('Histórico de movimentações',{exact:true})).toContainText('Nenhum histórico local');
+    await expect(page.getByLabel('Histórico de movimentações',{exact:true})).toContainText('O histórico de ajustes ainda não está disponível.');
     await expect(page.getByText('Produto local proibido')).toHaveCount(0);expect(state.posts).toHaveLength(0);
 });
 test('paginação e filtros por depósito e oferta usam valores oficiais',async({page})=>{
@@ -97,7 +100,7 @@ test('catálogo sem oferta não gera saldo e navegação mantém criação real 
     const state=await setup(page);state.items=[balance(),balance(1)];
     await page.goto('/fornecedor/estoque');
     await page.getByText('Como interpretar os saldos',{exact:true}).click();
-    await expect(page.getByLabel('Catálogo, ofertas e saldos',{exact:true})).toContainText('Produtos do catálogo sem oferta não aparecem automaticamente');
+    await expect(page.getByLabel('Catálogo, ofertas e saldos',{exact:true})).toContainText('Produtos sem oferta não aparecem nesta lista.');
     await expect(page.getByText('Página 1 de 1 · 2 registros')).toBeVisible();
     await page.getByRole('link',{name:'Criar oferta para outro produto',exact:true}).click();
     await expect(page).toHaveURL(/\/fornecedor\/produtos#minhas-ofertas$/);
@@ -109,7 +112,7 @@ test('catálogo sem oferta não gera saldo e navegação mantém criação real 
     await expect(page.getByRole('cell',{name:'Produto sem oferta',exact:true})).toBeVisible();
     await page.getByText('Produto não encontrado?',{exact:true}).click();
     await expect(page.getByRole('button',{name:'Solicitar cadastro de produto',exact:true})).toBeDisabled();
-    await expect(page.getByLabel('Solicitação de novos produtos',{exact:true})).toContainText('Nenhum produto ou solicitação é criado');
+    await expect(page.getByLabel('Solicitação de novos produtos',{exact:true})).toContainText('A inclusão de novos produtos por esta área ainda não está disponível.');
     await page.getByRole('link',{name:'Consultar estoque das minhas ofertas',exact:true}).click();
     await expect(page).toHaveURL(/\/fornecedor\/estoque$/);
     await expect(page.getByText('Página 1 de 1 · 2 registros')).toBeVisible();
@@ -118,9 +121,12 @@ test('catálogo sem oferta não gera saldo e navegação mantém criação real 
 });
 test('revisão e ajuste válido preservam reservas e enviam versão',async({page})=>{
     const state=await setup(page);await page.goto('/fornecedor/estoque');const dialog=await reviewAdjustment(page);
+    await expect(dialog.getByText('offer-0',{exact:true})).toHaveCount(0);
+    await expect(dialog.getByText('warehouse',{exact:true})).toHaveCount(0);
+    await expect(dialog.getByText(/versão/i)).toHaveCount(0);
     expect(state.posts).toHaveLength(0);
     await dialog.getByRole('button',{name:'Confirmar ajuste',exact:true}).click();
-    await expect(page.getByText('Ajuste de estoque confirmado pelo Backend.',{exact:true})).toBeVisible();
+    await expect(page.getByText('Ajuste de estoque confirmado.',{exact:true})).toBeVisible();
     await stockRow(page).getByText('Detalhes do estoque',{exact:true}).click();
     await expect(stockRow(page).getByText('25',{exact:true})).toBeVisible();
     await expect(stockRow(page).getByRole('cell',{name:'3',exact:true})).toBeVisible();

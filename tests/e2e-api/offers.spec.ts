@@ -116,7 +116,7 @@ for (const width of [1440, 390]) {
                 await expect(page.getByRole('main')).toContainText('Operador do fornecedor');
                 await expect(page.getByRole('main').getByRole('textbox')).toHaveCount(0);
             }
-            if(name==='rotas')await expect(page.getByText('Integração pendente',{exact:true})).toBeVisible();
+            if(name==='rotas')await expect(page.getByText('A atribuição de motoristas estará disponível em breve.',{exact:true})).toBeVisible();
             expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
             const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
             expect(audit.violations.map(item=>({id:item.id,nodes:item.nodes.map(node=>node.target)}))).toEqual([]);
@@ -137,10 +137,10 @@ for (const width of [1440, 390]) {
 test('cadastro atualiza depósitos e mantém pendentes fora das ofertas',async({page})=>{
     const state=await setup(page);await page.goto('/fornecedor/produtos');
     const dialog=await fillWarehouse(page);
-    await expect(dialog).toContainText('confirmação geográfica administrativa');
+    await expect(dialog).toContainText('confirmação do endereço');
     await dialog.getByRole('button',{name:'Confirmar cadastro',exact:true}).click();
     await expect(dialog.getByRole('button',{name:'Cadastrando depósito…'})).toBeDisabled();
-    await expect(page.getByText('Depósito cadastrado com sucesso. Aguarda confirmação geográfica administrativa antes de poder receber ofertas.',{exact:true})).toBeVisible();
+    await expect(page.getByText('Depósito cadastrado. Ele poderá receber ofertas após a confirmação do endereço.',{exact:true})).toBeVisible();
     await expect(page.getByRole('heading',{name:'Depósito Norte'})).toBeVisible();
     expect(state.posts).toHaveLength(1);
     expect(state.posts[0]).toEqual({path:`/api/v1/suppliers/${org}/warehouses`,body:{name:'Depósito Norte',address:'Rua Norte, 42',opening_hours:'08h às 18h',region:'Manaus'}});
@@ -197,7 +197,7 @@ test('depósitos elegíveis, criar, alterar e pausar com versão e confirmação
     const state=await setup(page);await page.goto('/fornecedor/produtos');
     await page.getByRole('tab',{name:'Meus depósitos',exact:true}).click();
     const deposits=page.getByRole('region',{name:'Depósitos próprios',exact:true});
-    await expect(deposits.getByText('Geocodificação pendente · Ativo')).toBeVisible();
+    await expect(deposits.getByText('Aguardando confirmação da localização · Ativo')).toBeVisible();
     const dialog=await reviewCreate(page);
     expect(state.posts).toHaveLength(0);
     await dialog.getByRole('button',{name:'Confirmar criação',exact:true}).click();

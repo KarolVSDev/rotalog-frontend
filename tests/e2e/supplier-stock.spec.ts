@@ -43,10 +43,8 @@ test("pedido de teste aceita sem Web Locks, atualiza as duas telas e persiste ap
         await expect(row.getByRole("cell").nth(4)).toHaveText(currency(item.quantity * item.unitPrice));
     }
     await expect(details.getByRole("region", { name: "Resumo financeiro", exact: true })).toContainText(currency(created.orderItems.reduce((sum: number, item: { quantity: number; unitPrice: number }) => sum + item.quantity * item.unitPrice, 0)));
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-    await details.getByRole("button", { name: "Copiar identificador", exact: true }).click();
-    await expect(details.getByRole("status")).toHaveText("Identificador copiado.");
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(created.id);
+    await expect(details.getByText(created.id, { exact: true })).toHaveCount(0);
+    await expect(details.getByText("Identificador completo", { exact: true })).toHaveCount(0);
     await details.getByRole("button", { name: "Fechar detalhes do pedido", exact: true }).click();
     expect(await balance(inventory, "PROD-001")).toEqual(before);
     await card.getByRole("button", { name: /^Aceitar pedido/ }).click();
@@ -68,7 +66,7 @@ test("pedido de teste aceita sem Web Locks, atualiza as duas telas e persiste ap
     await expect(mirror.locator("article").filter({ hasText: "Cliente fictício" }).getByRole("button", { name: "Marcar como pronto" })).toBeVisible();
 });
 
-test("IDs antigos fora do UUID, rótulos persistidos, Dashboard e miniatura do produto correspondente", async ({ page }) => {
+test("rótulos curtos persistidos, Dashboard e miniatura do produto correspondente sem expor UUIDs", async ({ page }) => {
     await page.goto("/fornecedor/pedidos");
     await page.getByRole("button", { name: "+ Pedido de teste" }).click();
     const originalId = "TESTE-3e6968b543f1c00328015ea2578537";
@@ -97,7 +95,8 @@ test("IDs antigos fora do UUID, rótulos persistidos, Dashboard e miniatura do p
     await card.getByRole("button", { name: /^Ver detalhes/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: label, exact: true })).toBeVisible();
-    await expect(dialog.locator("code")).toHaveText(originalId);
+    await expect(dialog.locator("code")).toHaveCount(0);
+    await expect(dialog.getByText(originalId, { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("img")).toHaveCount(1);
     await expect(dialog.getByRole("img")).toBeVisible();
     await page.keyboard.press("Escape");

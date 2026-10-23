@@ -137,7 +137,7 @@ export class OffersRepository {
     }
     create(product: CatalogProduct, warehouse: Warehouse, price: string, quantity: string) {
         if (product.publication_state !== "PUBLISHED") throw new Error("Selecione um produto publicado.");
-        if (!eligibleWarehouse(warehouse, this.organizationId)) throw new Error("Selecione um depósito próprio, ativo e com geocodificação confirmada.");
+        if (!eligibleWarehouse(warehouse, this.organizationId)) throw new Error("Selecione um depósito próprio, ativo e com a localização confirmada.");
         const body = {product_id:product.id, warehouse_id:warehouse.id, unit_price:offerPrice(price), currency:"BRL", minimum_order_quantity:minimumQuantity(quantity)};
         return this.post(`/api/v1/suppliers/${encodeURIComponent(this.organizationId)}/offers`, body, true);
     }

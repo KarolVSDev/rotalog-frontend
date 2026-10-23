@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSupplierProducts } from "../../products/hooks/useSupplierProducts";
 import { ProductImage } from "../../products/components/ProductImage";
 import { OrderDeadline } from "./OrderDeadline";
@@ -12,6 +12,7 @@ import type {
     FinancialStatus,
     SupplierOrder,
 } from "../mocks/orders.mock";
+import { shortOrderId } from "../api/orderAdapter";
 
 type OrderDetailsModalProps = {
     order: SupplierOrder;
@@ -57,26 +58,6 @@ export function OrderDetailsModal({
     const closeButtonRef = useRef<HTMLButtonElement>(null);
     const onCloseRef = useRef(onClose);
     const { products, error: catalogError } = useSupplierProducts(activeOrganization.id);
-    const [copyMessage, setCopyMessage] = useState<string | null>(null);
-
-    async function copyIdentifier() {
-        try {
-            if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(order.id);
-            else {
-                const field = document.createElement("textarea");
-                field.value = order.id;
-                field.readOnly = true;
-                field.style.cssText = "position:fixed;opacity:0;pointer-events:none";
-                modalRef.current?.appendChild(field);
-                try {
-                    field.select();
-                    if (!document.execCommand("copy")) throw new Error("Cópia indisponível");
-                } finally { field.remove(); }
-            }
-            setCopyMessage("Identificador copiado.");
-        } catch { setCopyMessage("Não foi possível copiar. Selecione o identificador e copie manualmente."); }
-    }
-
     useEffect(() => {
         onCloseRef.current = onClose;
     }, [onClose]);
@@ -183,7 +164,6 @@ export function OrderDetailsModal({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="order-details-title"
-                aria-describedby="order-details-description"
                 tabIndex={-1}
                 className="flex max-h-[90dvh] w-full min-w-0 max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl [overflow-wrap:anywhere]"
             >
@@ -194,10 +174,9 @@ export function OrderDetailsModal({
                         </p>
                         <h2
                             id="order-details-title"
-                            title={displayId ?? order.id}
                             className="mt-1 truncate text-2xl font-bold tracking-tight text-slate-900"
                         >
-                            {displayId ?? order.id}
+                            {displayId ?? shortOrderId(order.id)}
                         </h2>
                         <p className="mt-1 text-sm text-slate-500">
                             {activeOrganization.name}
@@ -215,12 +194,6 @@ export function OrderDetailsModal({
                 </header>
 
                 <div className="min-h-0 space-y-6 overflow-y-auto px-5 py-5 sm:px-7">
-                    <div className="rounded-xl border border-slate-200 p-4">
-                        <p className="text-xs text-slate-500">Identificador completo</p>
-                        <code className="mt-1 block select-all break-all text-xs text-slate-700">{order.id}</code>
-                        <button type="button" onClick={() => void copyIdentifier()} className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-600">Copiar identificador</button>
-                        {copyMessage && <p role="status" className="mt-2 text-xs text-slate-600">{copyMessage}</p>}
-                    </div>
                     <section aria-labelledby="order-status-heading">
                         <h3
                             id="order-status-heading"
@@ -374,7 +347,7 @@ export function OrderDetailsModal({
                             </div>
                         ) : (
                             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
-                                A relação de produtos ainda não está disponível neste pedido demonstrativo.
+                                Os itens deste pedido não estão disponíveis.
                             </div>
                         )}
                         {orderItems.length > 0 && <p className="mt-2 text-xs text-slate-500">{catalogError ? "Não foi possível consultar as unidades no catálogo." : "Unidades consultadas no catálogo atual do fornecedor. Quantidades e preços são os registrados no pedido."}</p>}
@@ -396,13 +369,6 @@ export function OrderDetailsModal({
                         </div>
                     </section>
 
-                    <p
-                        id="order-details-description"
-                        className="text-xs text-slate-500"
-                    >
-                        Informações simuladas para validação do frontend. A
-                        integração com a API do RotaLog será realizada posteriormente.
-                    </p>
                 </div>
 
                 <footer className="flex shrink-0 justify-end border-t border-slate-200 px-5 py-4 sm:px-7">

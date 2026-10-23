@@ -39,13 +39,15 @@ async function setup(page: Page) {
 test('catálogo oficial: paginação, pesquisa, detalhes e ausência de ações locais',async({page})=>{
     const state=await setup(page);
     await page.goto('/fornecedor/produtos#catalogo');
-    await expect(page.getByRole('cell',{name:'Arroz oficial 1',exact:true})).toBeVisible();
+    await expect(page.getByText('Arroz oficial 1',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('Categoria nesta página')).toHaveCount(0);
+    await expect(page.getByRole('img',{name:'Imagem de Arroz oficial 1 não disponível'})).toBeVisible();
     await expect(page.getByText('Produto local proibido')).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Novo produto',exact:true})).toHaveCount(0);
     await page.getByText('Produto não encontrado?',{exact:true}).click();
     await expect(page.getByRole('button',{name:'Solicitar cadastro de produto'})).toBeDisabled();
     await page.getByRole('button',{name:'Próxima',exact:true}).click();
-    await expect(page.getByRole('cell',{name:'Arroz oficial 26',exact:true})).toBeVisible();
+    await expect(page.getByText('Arroz oficial 26',{exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Próxima',exact:true})).toBeDisabled();
     await page.getByRole('searchbox',{name:'Pesquisar por nome'}).fill('oficial 2');
     await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
@@ -55,6 +57,8 @@ test('catálogo oficial: paginação, pesquisa, detalhes e ausência de ações 
     await expect(dialog.getByRole('heading',{name:'Arroz oficial 2',exact:true})).toBeVisible();
     await expect(dialog.getByText('1050 g',{exact:true})).toBeVisible();
     await expect(dialog.getByText('Não informado',{exact:true})).toBeVisible();
+    await expect(dialog.getByText('product-2',{exact:true})).toHaveCount(0);
+    await expect(dialog.getByText(/versão/i)).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     expect(state.requests.some(path=>path.includes('page=2'))).toBe(true);
@@ -87,7 +91,7 @@ test('falhas de permissão e rede não recorrem ao catálogo local',async({page}
     await expect(page.getByText('Produto local proibido')).toHaveCount(0);
     state.network=false;
     await page.getByRole('button',{name:'Tentar novamente',exact:true}).click();
-    await expect(page.getByRole('cell',{name:'Arroz oficial 1',exact:true})).toBeVisible();
+    await expect(page.getByText('Arroz oficial 1',{exact:true})).toBeVisible();
     state.detailStatus=404;
     await page.getByRole('button',{name:'Ver detalhes de Arroz oficial 1',exact:true}).click();
     await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Produto não encontrado');

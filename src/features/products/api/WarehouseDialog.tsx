@@ -21,7 +21,7 @@ export function WarehouseDialog({pending, error, uncertain, onClose, onConfirm}:
     const button = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-50";
     return createPortal(<dialog ref={dialog} data-supplier-ui aria-labelledby={title} onCancel={event => {event.preventDefault(); if (!pending) onClose();}} className="fixed inset-0 m-auto max-h-[calc(100dvh_-_1.5rem)] w-[calc(100%_-_1.5rem)] max-w-xl overflow-y-auto rounded-2xl border-0 bg-white p-5 text-slate-900 shadow-xl backdrop:bg-slate-950/60">
         <h2 id={title} className="text-xl font-semibold">Cadastrar depósito</h2>
-        <p className="mt-3 text-sm text-slate-600">Após o cadastro, o depósito aguardará confirmação geográfica administrativa. Somente depósitos ativos e com geocodificação confirmada podem receber ofertas.</p>
+        <p className="mt-3 text-sm text-slate-600">Após o cadastro, aguarde a confirmação do endereço. Somente depósitos ativos e com o endereço confirmado podem receber ofertas.</p>
         {(validation || error) && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{validation ?? error}</p>}
         <form className="mt-4 space-y-4" onSubmit={event => {
             event.preventDefault();

@@ -7,13 +7,13 @@ const offer={id:'offer-one',product_id:product.id,product_name:product.name,supp
 const slot={id:'slot',warehouse_id:'warehouse',starts_at:'2026-01-01T00:00:00Z',ends_at:'2099-01-01T00:00:00Z',total_quantity:100,reserved_quantity:0};
 const order={id:'supplier-order',purchase_id:'purchase',buyer_organization_id:organization,supplier_organization_id:'supplier-org',warehouse_id:'warehouse',state:'AWAITING_SUPPLIER_DECISION',total:'299.80',items:[{id:'item',offer_id:offer.id,product,unit_price:'149.90',requested_quantity:2,supplier_accepted_quantity:0,separated_quantity:0,dispatched_quantity:0,delivered_quantity:0}],fulfillments:[],allowed_actions:[],version:1};
 async function setup(page:Page,restore=true) {
-    const state={role:'BUYER_ADMIN' as 'BUYER_ADMIN'|'SUPPLIER_OPERATOR',capabilities:['catalog:read','checkout:create','purchase:read'],org:organization,products:[product],offers:[offer],delayOffers:0,network:false,createFail:0,createStatus:0,payFail:0,payStatus:0,purchaseStatus:0,emptyPurchases:false,foreign:false,created:[] as {key:string;body:unknown}[],payments:[] as {key:string;body:unknown}[],confirmed:false,checkoutVersion:1,expired:false,unknown:[] as string[]};
+    const state={role:'BUYER_ADMIN' as 'BUYER_ADMIN'|'SUPPLIER_OPERATOR',capabilities:['catalog:read','checkout:create','purchase:read'],org:organization,products:[product],offers:[offer],orderStates:['AWAITING_SUPPLIER_DECISION'],delayOffers:0,network:false,createFail:0,createStatus:0,payFail:0,payStatus:0,purchaseStatus:0,purchaseGets:0,purchaseState:'ACTIVE',purchaseFailNext:false,purchaseDelay:0,purchaseInFlight:0,maxPurchaseInFlight:0,emptyPurchases:false,foreign:false,created:[] as {key:string;body:unknown}[],payments:[] as {key:string;body:unknown}[],confirmed:false,checkoutVersion:1,expired:false,unknown:[] as string[]};
     if(restore)await page.addInitScript(()=>sessionStorage.setItem('rotalog:api-csrf','test-csrf'));
     await page.route('http://localhost:8000/**',async route=>{
         const request=route.request(),url=new URL(request.url()),path=url.pathname;
         const user={id:state.role==='BUYER_ADMIN'?'buyer':'supplier',name:'Usuário Sintético',email:'user@example.invalid',role:state.role,organization_id:state.org,organizations:[{id:state.org,name:'Organização Sintética',role:state.role}],capabilities:state.capabilities,demo_run_id:'demo',is_synthetic:true};
         const checkout=()=>({id:'checkout',state:state.confirmed?'CONVERTED':state.expired?'EXPIRED':'READY_FOR_PAYMENT',version:state.checkoutVersion,supplier_organization_id:'supplier-org',warehouse_id:'warehouse',capacity_slot_id:slot.id,expires_at:state.expired?'2020-01-01T00:00:00Z':'2099-01-01T00:00:00Z',total:'299.80',currency:'BRL',items:[{offer_id:offer.id,quantity:2,unit_price:'149.90',product}],purchase_id:state.confirmed?'purchase':null,is_synthetic:true});
-        const purchase={id:'purchase',checkout_id:'checkout',state:'ACTIVE',supplier_orders:[{...order,buyer_organization_id:state.foreign?'another-org':state.org}],is_synthetic:true};
+        const purchase={id:'purchase',checkout_id:'checkout',state:state.purchaseState,supplier_orders:state.orderStates.map((orderState,index)=>({...order,id:index?`supplier-order-${index}`:order.id,state:orderState,buyer_organization_id:state.foreign?'another-org':state.org})),is_synthetic:true};
         const list=(items:unknown[])=>({items,total:items.length,page:Number(url.searchParams.get('page')??1),page_size:Number(url.searchParams.get('page_size')??25),is_synthetic:true});
         if(path.endsWith('/auth/login')||path.endsWith('/auth/refresh'))return route.fulfill({json:{access_token:'test',token_type:'bearer',expires_in:600,csrf_token:'test-csrf',refresh_token:null,user}});
         if(path==='/api/v1/me')return route.fulfill({json:user});
@@ -42,7 +42,15 @@ async function setup(page:Page,restore=true) {
             return route.fulfill({json:{purchase_id:'purchase',supplier_order_ids:['supplier-order'],payment_id:'payment',payment_state:'CAPTURED',provider:'SIMULATED',total:'299.80',currency:'BRL',is_synthetic:true}});
         }
         if(path==='/api/v1/purchases')return route.fulfill({json:list(state.emptyPurchases?[]:[purchase])});
-        if(path==='/api/v1/purchases/purchase')return state.purchaseStatus?route.fulfill({status:state.purchaseStatus,json:{error:{code:'PURCHASE_NOT_FOUND'}}}):route.fulfill({json:purchase});
+        if(path==='/api/v1/purchases/purchase'){
+            state.purchaseGets++;state.purchaseInFlight++;state.maxPurchaseInFlight=Math.max(state.maxPurchaseInFlight,state.purchaseInFlight);
+            try {
+                if(state.purchaseDelay)await new Promise(resolve=>setTimeout(resolve,state.purchaseDelay));
+                if(state.network)return route.abort();
+                if(state.purchaseFailNext){state.purchaseFailNext=false;return route.fulfill({status:503,json:{error:{code:'TEMPORARY_FAILURE'}}});}
+                return state.purchaseStatus?route.fulfill({status:state.purchaseStatus,json:{error:{code:'PURCHASE_NOT_FOUND'}}}):route.fulfill({json:purchase});
+            } finally {state.purchaseInFlight--;}
+        }
         state.unknown.push(`${request.method()} ${path}`);
         return route.abort();
     });
@@ -55,8 +63,8 @@ async function add(page:Page) {
     await page.goto('/comprador/carrinho');
 }
 async function reserve(page:Page) {
-    await page.getByLabel('Janela de capacidade',{exact:true}).selectOption('slot');
-    await page.getByRole('button',{name:'Criar reserva e revisar compra'}).click();
+    await page.getByLabel('Período de atendimento',{exact:true}).selectOption('slot');
+    await page.getByRole('button',{name:'Reservar período e revisar compra'}).click();
 }
 test('login comprador, catálogo e compra real com confirmação explícita e histórico',async({page})=>{
     const state=await setup(page,false);
@@ -66,9 +74,14 @@ test('login comprador, catálogo e compra real com confirmação explícita e hi
     await page.getByRole('button',{name:'Entrar',exact:true}).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading',{name:product.name,exact:true})).toBeVisible();
+    await expect(page.getByLabel('Categoria nesta página')).toHaveCount(0);
+    await expect(page.getByRole('img',{name:`Imagem de ${product.name} não disponível`})).toBeVisible();
     await expect(page.getByText('R$ 149,90',{exact:true}).first()).toBeVisible();
+    await expect(page.getByText('Oferta de Distribuidora oficial',{exact:true})).toBeVisible();
     await add(page);await reserve(page);
+    await expect(page.getByText('por unidade comercial da oferta',{exact:true})).toBeVisible();
     await expect(page.getByText('Total oficial:',{exact:true}).locator('..')).toContainText('R$ 299,80');
+    await expect(page.getByText('Os preços abaixo são por unidade comercial, conforme cada oferta confirmada.',{exact:true})).toBeVisible();
     expect(state.payments).toHaveLength(0);
     expect(state.created[0].body).toEqual({items:[{offer_id:offer.id,quantity:2}],capacity_slot_id:'slot',accepts_partial:false});
     await page.getByRole('button',{name:'Confirmar pagamento sintético'}).click();
@@ -76,11 +89,32 @@ test('login comprador, catálogo e compra real com confirmação explícita e hi
     await expect(page.getByText('Aguardando', {exact:false}).first()).toBeVisible();
     expect(state.payments).toHaveLength(1);
     expect(state.payments[0].body).toEqual({expected_version:1});
-    await page.getByText('Identificadores para acompanhamento').click();
-    await expect(page.getByText('Pedido do fornecedor: supplier-order')).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Compra #PURCHASE',exact:true})).toBeVisible();
+    await expect(page.getByText('Pedido #SUPPLIER', {exact:true})).toBeVisible();
+    await expect(page.getByText('purchase', {exact:true})).toHaveCount(0);
+    await expect(page.getByText('supplier-order', {exact:true})).toHaveCount(0);
     await page.goto('/comprador/compras');
     await expect(page.getByRole('link',{name:/Ver detalhes/}).first()).toBeVisible();
     expect(state.unknown).toEqual([]);
+});
+test('catálogo considera a menor oferta ativa com estoque para o mínimo e informa a unidade',async({page})=>{
+    const state=await setup(page);
+    state.offers=[
+        offer,
+        {...offer,id:'offer-cheaper',supplier_name:'Distribuidora Econômica',unit_price:'4.00'},
+        {...offer,id:'offer-inactive',supplier_name:'Oferta inativa',unit_price:'1.00',is_active:false},
+        {...offer,id:'offer-unavailable',supplier_name:'Oferta sem estoque mínimo',unit_price:'0.50',available_quantity:1},
+    ];
+    await page.goto('/');
+    await expect(page.getByText('R$ 4,00',{exact:true})).toBeVisible();
+    await expect(page.getByText('Oferta de Distribuidora Econômica',{exact:true})).toBeVisible();
+    await expect(page.getByText('por fardo',{exact:true})).toBeVisible();
+    await page.goto(`/produto/${product.id}`);
+    await expect(page.getByText('R$ 149,90',{exact:false})).toBeVisible();
+    await expect(page.getByText('R$ 4,00',{exact:false})).toBeVisible();
+    await expect(page.getByText('R$ 1,00',{exact:true})).toHaveCount(0);
+    await expect(page.getByText('por unidade comercial (fardo)',{exact:false}).first()).toBeVisible();
+    expect(state.created).toHaveLength(0);
 });
 test('criação incerta não é repetida automaticamente e recupera a mesma chave após recarga',async({page})=>{
     const state=await setup(page);state.createFail=1;
@@ -121,7 +155,7 @@ test('expiração confirmada permite revisão sem afirmar cancelamento local',as
     await expect(page.getByRole('button',{name:'Confirmar pagamento sintético'})).toHaveCount(0);
     await expect(page.getByText('Prazo da reserva encerrado.')).toBeVisible();
     await page.getByRole('button',{name:'Revisar carrinho após expiração confirmada'}).click();
-    await expect(page.getByRole('button',{name:'Criar reserva e revisar compra'})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Reservar período e revisar compra'})).toBeVisible();
     expect(state.payments).toHaveLength(0);
 });
 test('mudança de versão exige nova revisão antes de pagar',async({page})=>{
@@ -180,7 +214,7 @@ test('rejeição definitiva de estoque permite corrigir sem manter reserva fict�
     const state=await setup(page);state.createStatus=409;
     await add(page);await reserve(page);
     await expect(page.getByRole('alert')).toContainText('Estoque insuficiente');
-    await expect(page.getByRole('button',{name:'Criar reserva e revisar compra'})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Reservar período e revisar compra'})).toBeVisible();
     expect(state.created).toHaveLength(1);expect(state.payments).toHaveLength(0);
 });
 test('401 no pagamento encerra sessão e não reenvia a operação',async({page})=>{
@@ -226,7 +260,7 @@ test('rejeição definitiva durante recuperação libera somente o formulário l
     await add(page);await reserve(page);await expect(page.getByRole('button',{name:'Recuperar criação com a mesma chave'})).toBeEnabled();
     state.createStatus=409;await page.getByRole('button',{name:'Recuperar criação com a mesma chave'}).click();
     await expect(page.getByRole('alert')).toContainText('Estoque insuficiente');
-    await expect(page.getByRole('button',{name:'Criar reserva e revisar compra'})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Reservar período e revisar compra'})).toBeVisible();
     expect(state.created[1]).toEqual(state.created[0]);expect(state.payments).toHaveLength(0);
 });
 test('histórico rejeita resposta com pedidos de outra organização',async({page})=>{
@@ -236,9 +270,11 @@ test('histórico rejeita resposta com pedidos de outra organização',async({pag
 });
 for(const width of [1440,390])test(`compras refinadas: rótulos, quantidades e logística honesta em ${width}px`,async({page},testInfo)=>{
     const state=await setup(page);await page.setViewportSize({width,height:900});await page.goto('/comprador/compras');
-    await expect(page.getByText('Em andamento',{exact:true})).toBeVisible();
+    await expect(page.getByText('Estado comercial da compra',{exact:true})).toBeVisible();
+    await expect(page.getByText('Em andamento',{exact:true})).toHaveClass(/bg-blue-50/);
     await expect(page.getByText('Estado oficial: ACTIVE',{exact:true})).not.toBeVisible();
-    await expect(page.getByText('Aguardando aceite',{exact:false}).first()).toBeVisible();
+    await expect(page.getByText('Aguardando aceite',{exact:true})).toHaveClass(/bg-amber-50/);
+    await expect(page.getByText('Situação operacional',{exact:true})).toBeVisible();
     await page.screenshot({path:testInfo.outputPath(`purchase-history-${width}.png`),fullPage:true});
     await page.getByRole('link',{name:/Ver detalhes/}).click();
     await expect(page.getByRole('link',{name:'Voltar às compras'})).toBeVisible();
@@ -254,4 +290,111 @@ for(const width of [1440,390])test(`compras refinadas: rótulos, quantidades e l
     await page.screenshot({path:testInfo.outputPath(`purchase-details-${width}.png`),fullPage:true});
     const accessibility=await new AxeBuilder({page}).analyze();expect(accessibility.violations).toEqual([]);
     expect(state.created).toHaveLength(0);expect(state.payments).toHaveLength(0);expect(state.unknown).toEqual([]);
+});
+test('badges operacionais usam cores acessíveis sem substituir o estado comercial',async({page})=>{
+    const state=await setup(page);
+    state.orderStates=['AWAITING_SUPPLIER_DECISION','SEPARATING','READY_TO_DISPATCH','REFUSED','CANCELLED'];
+    await page.goto('/comprador/compras');
+    await expect(page.getByText('Em andamento',{exact:true})).toHaveClass(/bg-blue-50/);
+    for(const [label,color] of [['Aguardando aceite','bg-amber-50'],['Em separação','bg-blue-50'],['Pronto para coleta','bg-emerald-50'],['Recusado','bg-red-50'],['Cancelado','bg-red-50']]) {
+        await expect(page.getByText(label,{exact:true})).toHaveClass(new RegExp(color));
+    }
+    expect(state.created).toHaveLength(0);expect(state.payments).toHaveLength(0);
+});
+
+test('detalhes da compra atualizam badge e progresso a cada dez segundos sem recarregar',async({page})=>{
+    await page.clock.install();
+    const state=await setup(page);
+    let pageLoads=0;page.on('load',()=>pageLoads++);
+    await page.goto('/comprador/compras/purchase');
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'})).toHaveAttribute('aria-valuenow','0');
+    await expect.poll(()=>state.purchaseGets).toBe(1);
+    expect(state.purchaseGets).toBe(1);
+    state.orderStates=['SEPARATING'];
+    const update=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/purchases/purchase');
+    await page.clock.fastForward(10_000);
+    await update;
+    await expect(page.getByText('Em separação',{exact:true})).toBeVisible();
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'})).toHaveAttribute('aria-valuenow','2');
+    await expect(page.getByText('Atualização automática a cada 10 segundos.',{exact:true})).toBeVisible();
+    expect(pageLoads).toBe(1);
+    expect(state.purchaseGets).toBe(2);
+    expect(state.created).toHaveLength(0);expect(state.payments).toHaveLength(0);
+});
+
+test('falha temporária mantém a última situação e a próxima consulta atualiza',async({page})=>{
+    await page.clock.install();
+    const state=await setup(page);
+    await page.goto('/comprador/compras/purchase');
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'}).getByText('Aguardando fornecedor',{exact:true})).toBeVisible();
+    await expect.poll(()=>state.purchaseGets).toBe(1);
+    state.purchaseFailNext=true;
+    const failedUpdate=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/purchases/purchase'&&response.status()===503);
+    await page.clock.fastForward(10_000);
+    await failedUpdate;
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'}).getByText('Aguardando fornecedor',{exact:true})).toBeVisible();
+    await expect(page.getByText('Não foi possível atualizar. Exibindo a última situação recebida.',{exact:true})).toBeVisible();
+    state.orderStates=['READY_TO_DISPATCH'];
+    const recovered=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/purchases/purchase'&&response.status()===200);
+    await page.clock.fastForward(10_000);
+    await recovered;
+    await expect(page.getByText('Pronto para coleta',{exact:true})).toBeVisible();
+    await expect(page.getByText('Não foi possível atualizar. Exibindo a última situação recebida.',{exact:true})).toHaveCount(0);
+});
+
+test('suspende polling em aba oculta e consulta imediatamente ao retornar',async({page})=>{
+    await page.clock.install();
+    const state=await setup(page);
+    await page.goto('/comprador/compras/purchase');
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'})).toBeVisible();
+    await expect.poll(()=>state.purchaseGets).toBe(1);
+    await page.evaluate(()=>{
+        let visibility:'visible'|'hidden'='visible';
+        Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>visibility});
+        Object.defineProperty(window,'setTestVisibility',{configurable:true,value:(value:'visible'|'hidden')=>{visibility=value;document.dispatchEvent(new Event('visibilitychange'));}});
+    });
+    await page.evaluate(()=>window.setTestVisibility('hidden'));
+    await page.clock.fastForward(20_000);
+    expect(state.purchaseGets).toBe(1);
+    state.orderStates=['ACCEPTED'];
+    const resumed=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/purchases/purchase');
+    await page.evaluate(()=>window.setTestVisibility('visible'));
+    await resumed;
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'}).getByText('Pedido analisado',{exact:true})).toBeVisible();
+    expect(state.purchaseGets).toBe(2);
+});
+
+test('não sobrepõe consultas, encerra polling ao sair e pausa automaticamente em compra cancelada',async({page})=>{
+    await page.clock.install();
+    const state=await setup(page);
+    await page.goto('/comprador/compras/purchase');
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'})).toBeVisible();
+    await expect.poll(()=>state.purchaseGets).toBe(1);
+    state.purchaseDelay=2_000;
+    const first=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/purchases/purchase');
+    await page.clock.fastForward(10_000);
+    await first;
+    await expect.poll(()=>state.maxPurchaseInFlight).toBe(1);
+    await page.getByRole('link',{name:'Voltar às compras'}).click();
+    const callsAfterExit=state.purchaseGets;
+    await page.clock.fastForward(20_000);
+    expect(state.purchaseGets).toBe(callsAfterExit);
+
+    state.purchaseDelay=0;state.purchaseState='CANCELLED';
+    await page.goto('/comprador/compras/purchase');
+    await expect(page.getByText('Compra cancelada; atualização automática pausada.',{exact:true})).toBeVisible();
+    const terminalCalls=state.purchaseGets;
+    await page.clock.fastForward(20_000);
+    expect(state.purchaseGets).toBe(terminalCalls);
+});
+
+test('sessão expirada durante a atualização automática segue o redirecionamento de autenticação',async({page})=>{
+    await page.clock.install();
+    const state=await setup(page);
+    await page.goto('/comprador/compras/purchase');
+    await expect(page.getByRole('progressbar',{name:'Etapas confirmadas da preparação'})).toBeVisible();
+    state.purchaseStatus=401;
+    await page.clock.fastForward(10_000);
+    await expect(page).toHaveURL(/\/login$/);
+    expect(state.created).toHaveLength(0);expect(state.payments).toHaveLength(0);
 });

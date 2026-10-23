@@ -42,7 +42,7 @@ export function Login() {
             const requestedPath = locationState?.from;
 
             const defaultPath =
-                user.role === "BUYER_ADMIN" ? "/" : "/fornecedor";
+                user.role === "ROTALOG_ADMIN" ? "/admin" : user.role === "BUYER_ADMIN" ? "/" : "/fornecedor";
 
             const destination =
                 typeof requestedPath === "string" &&
@@ -52,7 +52,9 @@ export function Login() {
                 !requestedPath.includes("\\") &&
                 !requestedPath.includes("://") &&
                 !["/login", "/cadastro"].includes(requestedPath) &&
-                (user.role === "BUYER_ADMIN"
+                (user.role === "ROTALOG_ADMIN"
+                    ? requestedPath === "/admin" || requestedPath.startsWith("/admin/")
+                    : user.role === "BUYER_ADMIN"
                     ? requestedPath.startsWith("/produto/") ||
                       requestedPath.startsWith("/comprador")
                     : requestedPath.startsWith("/fornecedor"))

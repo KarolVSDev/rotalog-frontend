@@ -26,8 +26,7 @@ export function LogisticsSummary({state}: {state: string}) {
     return <section aria-label="Situação logística" className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
         <h3 className="font-bold text-blue-950">Situação logística</h3>
         <p className="mt-2 text-sm text-slate-700">{preparationMessage(state)}</p>
-        <p className="mt-2 text-sm text-slate-600">O acompanhamento de rota, GPS e comprovantes ainda não está integrado neste portal.</p>
-        <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold text-blue-700">Sobre o acompanhamento</summary><p className="mt-2 text-slate-600">Os dados disponíveis não permitem confirmar a coleta, o percurso ou a entrega. Nenhum evento ou horário de transporte é estimado aqui.</p></details>
+        <p className="mt-2 text-sm text-slate-600">Ainda não há confirmação de coleta ou entrega para este pedido.</p>
     </section>;
 }
 

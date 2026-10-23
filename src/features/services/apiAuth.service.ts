@@ -86,12 +86,17 @@ export function supplierPermissions(user: AuthUser): Permission[] {
     return permissions;
 }
 function authorize(user: ApiUser): ApiUser {
-    if (!supplierPermissions(user).length && !buyerAuthorized(user)) throw new ApiError(403);
+    if (!supplierPermissions(user).length && !buyerAuthorized(user) && !adminAuthorized(user)) throw new ApiError(403);
     return user;
 }
 export function buyerAuthorized(user: AuthUser, capability = "catalog:read"): boolean {
     return user.role === "BUYER_ADMIN" && !!user.organization_id &&
         !!user.organizations?.some(org => org.id === user.organization_id && org.role === "BUYER_ADMIN") &&
+        !!user.capabilities?.includes(capability);
+}
+export function adminAuthorized(user: AuthUser, capability = "catalog:read"): boolean {
+    return user.role === "ROTALOG_ADMIN" && !!user.organization_id &&
+        !!user.organizations?.some(org => org.id === user.organization_id && org.role === "ROTALOG_ADMIN") &&
         !!user.capabilities?.includes(capability);
 }
 export const apiAuthService = {
