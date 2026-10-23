@@ -6,7 +6,8 @@ import { Register } from "../features/auth/pages/Register";
 import { ProtectedRoute } from "../features/auth/components/ProtectedRoute";
 
 import { NotFoundPage } from "../shared/pages/NotFoundPage";
-import { FeaturePlaceholder } from "../shared/pages/FeaturePlaceholder";
+import { SupplierRoutes } from "../features/orders/pages/SupplierRoutes";
+import { SupplierAccount } from "../features/account/pages/SupplierAccount";
 
 import { ProductCatalog } from "../features/catalog/pages/ProductCatalog";
 import { ProductDetails } from "../features/catalog/pages/ProductDetails";
@@ -29,6 +30,7 @@ import { BuyerAccount } from "../features/account/pages/BuyerAccount";
 import { BuyerCart } from "../features/cart/pages/BuyerCart";
 import { BuyerPurchases } from "../features/purchases/pages/BuyerPurchases";
 import { BuyerPurchaseDetails } from "../features/purchases/pages/BuyerPurchaseDetails";
+import { ApiBuyerCatalog, ApiBuyerProductDetails, ApiBuyerCart, ApiBuyerPurchases, ApiBuyerPurchaseDetails } from "../features/buyer/api/BuyerPages";
 
 export const router = createBrowserRouter([
   // Marketplace público e portal do comprador
@@ -39,13 +41,13 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <ProductCatalog />,
+        element: authMode === "api" ? <ApiBuyerCatalog /> : <ProductCatalog />,
       },
       {
         path: "produto/:productId",
         element: (
           <ProtectedRoute allowedRoles={["BUYER_ADMIN"]}>
-            <ProductDetails />
+            {authMode === "api" ? <ApiBuyerProductDetails /> : <ProductDetails />}
           </ProtectedRoute>
         ),
       },
@@ -59,15 +61,15 @@ export const router = createBrowserRouter([
         children: [
           {
             path: "carrinho",
-            element: <BuyerCart />,
+            element: authMode === "api" ? <ProtectedRoute allowedRoles={["BUYER_ADMIN"]} capability="checkout:create"><ApiBuyerCart /></ProtectedRoute> : <BuyerCart />,
           },
           {
             path: "compras",
-            element: <BuyerPurchases />,
+            element: authMode === "api" ? <ProtectedRoute allowedRoles={["BUYER_ADMIN"]} capability="purchase:read"><ApiBuyerPurchases /></ProtectedRoute> : <BuyerPurchases />,
           },
           {
             path: "compras/:purchaseId",
-            element: <BuyerPurchaseDetails />,
+            element: authMode === "api" ? <ProtectedRoute allowedRoles={["BUYER_ADMIN"]} capability="purchase:read"><ApiBuyerPurchaseDetails /></ProtectedRoute> : <BuyerPurchaseDetails />,
           },
           {
             path: "conta",
@@ -115,13 +117,12 @@ export const router = createBrowserRouter([
         element: authMode === "api" ? <ApiSupplierInventory /> : <SupplierInventory />,
       },
       {
+        path: "conta",
+        element: <SupplierAccount />,
+      },
+      {
         path: "rotas",
-        element: (
-          <FeaturePlaceholder
-            title="Rotas"
-            description="Visualização das rotas e operações logísticas autorizadas."
-          />
-        ),
+        element: <SupplierRoutes />,
       },
     ],
   },

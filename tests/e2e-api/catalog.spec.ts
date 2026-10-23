@@ -38,11 +38,11 @@ async function setup(page: Page) {
 
 test('catálogo oficial: paginação, pesquisa, detalhes e ausência de ações locais',async({page})=>{
     const state=await setup(page);
-    await page.goto('/fornecedor/produtos');
+    await page.goto('/fornecedor/produtos#catalogo');
     await expect(page.getByRole('cell',{name:'Arroz oficial 1',exact:true})).toBeVisible();
     await expect(page.getByText('Produto local proibido')).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Novo produto',exact:true})).toHaveCount(0);
-    await expect(page.getByRole('button',{name:'Criar oferta para produto existente'})).toBeDisabled();
+    await page.getByText('Produto não encontrado?',{exact:true}).click();
     await expect(page.getByRole('button',{name:'Solicitar cadastro de produto'})).toBeDisabled();
     await page.getByRole('button',{name:'Próxima',exact:true}).click();
     await expect(page.getByRole('cell',{name:'Arroz oficial 26',exact:true})).toBeVisible();
@@ -63,7 +63,7 @@ test('catálogo oficial: paginação, pesquisa, detalhes e ausência de ações 
 
 test('catálogo vazio e pesquisa sem resultados',async({page})=>{
     const state=await setup(page);state.products=[];
-    await page.goto('/fornecedor/produtos');
+    await page.goto('/fornecedor/produtos#catalogo');
     await expect(page.getByText('Nenhum produto publicado no catálogo.')).toBeVisible();
     await page.getByRole('searchbox').fill('ausente');
     await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
@@ -72,14 +72,14 @@ test('catálogo vazio e pesquisa sem resultados',async({page})=>{
 
 test('sessão inválida segue o redirecionamento existente para login',async({page})=>{
     const state=await setup(page);state.status=401;
-    await page.goto('/fornecedor/produtos');
+    await page.goto('/fornecedor/produtos#catalogo');
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByText('Produto local proibido')).toHaveCount(0);
 });
 
 test('falhas de permissão e rede não recorrem ao catálogo local',async({page})=>{
     const state=await setup(page);state.status=403;
-    await page.goto('/fornecedor/produtos');
+    await page.goto('/fornecedor/produtos#catalogo');
     await expect(page.getByRole('alert')).toContainText('Sem autorização');
     state.status=0;state.network=true;
     await page.getByRole('button',{name:'Tentar novamente',exact:true}).click();
@@ -96,7 +96,7 @@ test('falhas de permissão e rede não recorrem ao catálogo local',async({page}
 for (const width of [360, 768, 1440]) {
 test(`catálogo e detalhes sem overflow em ${width}px`,async({page}, testInfo)=>{
     await page.setViewportSize({width,height:900});await setup(page);
-    await page.goto('/fornecedor/produtos');
+    await page.goto('/fornecedor/produtos#catalogo');
     await expect(page.getByRole('button',{name:'Ver detalhes de Arroz oficial 1',exact:true})).toBeAttached();
     await page.screenshot({path:testInfo.outputPath('catalogo.png'), fullPage:true});
     await page.getByRole('button',{name:'Ver detalhes de Arroz oficial 1',exact:true}).click();

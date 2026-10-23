@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../../features/auth/hooks/useAuth";
 import { useLogout } from "../../features/auth/hooks/useLogout";
 import { useCart } from "../../features/cart/hooks/useCart";
+import { BuyerIcon } from "../../features/buyer/components/BuyerVisuals";
 
 function CartIcon() {
     return (
@@ -131,14 +132,17 @@ export function MarketplaceLayout() {
 
                     <div className="mx-auto hidden w-full max-w-[440px] md:block">
                         {isCatalog ? (
-                            <input
-                                type="search"
-                                value={search}
-                                onChange={(event) => setSearch(event.target.value)}
-                                placeholder="Buscar produtos ou fornecedores..."
-                                aria-label="Buscar produtos"
-                                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 text-[13px] outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                            />
+                            <label className="relative block">
+                                <BuyerIcon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/>
+                                <input
+                                    type="search"
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                    placeholder="Buscar produtos ou fornecedores..."
+                                    aria-label="Buscar produtos"
+                                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                                />
+                            </label>
                         ) : (
                             <p className="text-center text-xs font-medium text-slate-500">
                                 Marketplace RotaLog
@@ -182,14 +186,17 @@ export function MarketplaceLayout() {
 
                 {isCatalog && (
                     <div className="border-t border-slate-100 px-4 py-2 md:hidden">
-                        <input
-                            type="search"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Buscar produtos..."
-                            aria-label="Buscar produtos"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs outline-none focus:border-blue-500"
-                        />
+                        <label className="relative block">
+                            <BuyerIcon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/>
+                            <input
+                                type="search"
+                                value={search}
+                                onChange={(event) => setSearch(event.target.value)}
+                                placeholder="Buscar produtos..."
+                                aria-label="Buscar produtos"
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                            />
+                        </label>
                     </div>
                 )}
             </header>
@@ -282,6 +289,7 @@ export function MarketplaceLayout() {
                             <p className="mt-1 truncate text-xs font-semibold">
                                 {user.name}
                             </p>
+                            {user.organizations?.find(org => org.id === user.organization_id)?.name && <p className="mt-1 break-words text-xs text-slate-500">{user.organizations.find(org => org.id === user.organization_id)?.name}</p>}
                         </div>
                     )}
                 </aside>
@@ -293,7 +301,7 @@ export function MarketplaceLayout() {
                         </div>
                     </main>
 
-                    <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-[11px] text-slate-400">
+                    <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-[11px] text-slate-600">
                         © 2026 RotaLog. Todos os direitos reservados.
                     </footer>
                 </div>
