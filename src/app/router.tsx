@@ -5,6 +5,7 @@ import { Register } from "../features/auth/pages/Register";
 import { ProtectedRoute } from "../features/auth/components/ProtectedRoute";
 import { authMode } from "../shared/api/config";
 
+import { FeaturePlaceholder } from "../shared/pages/FeaturePlaceholder";
 import { NotFoundPage } from "../shared/pages/NotFoundPage";
 import { SupplierRoutes } from "../features/orders/pages/SupplierRoutes";
 import { SupplierAccount } from "../features/account/pages/SupplierAccount";
@@ -106,7 +107,7 @@ export const router = createBrowserRouter([
     {
         path: "/fornecedor",
         element: (
-            <ProtectedRoute allowedRoles={["SUPPLIER_OPERATOR"]}>
+            <ProtectedRoute allowedRoles={authMode === "api" ? ["SUPPLIER_OPERATOR", "ROUTE_PLANNER"] : ["SUPPLIER_OPERATOR"]}>
                 {authMode === "api" ? <ApiOrdersProvider><AppLayout /></ApiOrdersProvider> : <AppLayout />}
             </ProtectedRoute>
         ),
@@ -118,6 +119,7 @@ export const router = createBrowserRouter([
             { path: "estoque", element: authMode === "api" ? <ApiSupplierInventory /> : <SupplierInventory /> },
             { path: "conta", element: <SupplierAccount /> },
             { path: "rotas", element: <SupplierRoutes /> },
+            ...(authMode === "api" ? [{ path: "planejamento", element: <ProtectedRoute allowedRoles={["ROUTE_PLANNER"]} capability="route:plan"><FeaturePlaceholder title="Planejamento" description="Organização e planejamento de rotas. As operações serão disponibilizadas em uma próxima etapa." /></ProtectedRoute> }] : []),
         ],
     },
     { path: "*", element: <NotFoundPage /> },

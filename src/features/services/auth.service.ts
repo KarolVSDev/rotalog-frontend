@@ -1,5 +1,5 @@
 
-export type UserRole = "BUYER_ADMIN" | "SUPPLIER_OPERATOR" | "DRIVER" | "ROTALOG_ADMIN";
+export type UserRole = "BUYER_ADMIN" | "SUPPLIER_OPERATOR" | "DRIVER" | "ROTALOG_ADMIN" | "ROUTE_PLANNER";
 
 export type AuthUser = {
     id: string;

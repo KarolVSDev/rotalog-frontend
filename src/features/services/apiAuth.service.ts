@@ -85,12 +85,18 @@ export function supplierPermissions(user: AuthUser): Permission[] {
     if (capabilities.includes("inventory:write")) permissions.push("inventory:view");
     return permissions;
 }
-function authorize(user: ApiUser): ApiUser {
+export function plannerAuthorized(user: AuthUser, capability = "route:plan"): boolean {
+    return user.role === "ROUTE_PLANNER" && !!user.organization_id &&
+        !!user.organizations?.some(org => org.id === user.organization_id && org.role === user.role) &&
+        !!user.capabilities?.includes(capability);
+}
+export function authorize(user: ApiUser): ApiUser {
     if (
         !supplierPermissions(user).length &&
         !buyerAuthorized(user, "catalog:read") &&
         !buyerAuthorized(user, "purchase:read") &&
-        !adminAuthorized(user)
+        !adminAuthorized(user) &&
+        !plannerAuthorized(user)
     ) throw new ApiError(403);
     return user;
 }

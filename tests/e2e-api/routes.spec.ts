@@ -184,6 +184,7 @@ test("offer:write isolada permite produtos, bloqueia rotas e não consulta pedid
     const state = await setup(page, { capabilities: ["offer:write"] });
     await page.goto("/fornecedor/produtos");
     await expect(page.getByRole("heading", { name: "Produtos", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Rotas", exact: true })).toHaveCount(0);
     expect(state.orderReads).toBe(0);
 
     await page.goto("/fornecedor/rotas");

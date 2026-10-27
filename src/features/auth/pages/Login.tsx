@@ -1,3 +1,5 @@
+import { loginDestination } from "../../../app/routePermissions";
+import { authMode } from "../../../shared/api/config";
 
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -39,39 +41,7 @@ export function Login() {
         try {
             const user = await login({ email, password });
 
-            const requestedPath = locationState?.from;
-
-            const defaultPath = user.role === "ROTALOG_ADMIN"
-                ? "/admin"
-                : user.role === "BUYER_ADMIN"
-                    ? user.capabilities?.includes("catalog:read") ? "/" : "/comprador/compras"
-                    : "/fornecedor";
-
-            const destination =
-                typeof requestedPath === "string" &&
-                requestedPath.startsWith("/") &&
-                !requestedPath.startsWith("//") &&
-                !requestedPath.startsWith("/\\") &&
-                !requestedPath.includes("\\") &&
-                !requestedPath.includes("://") &&
-                !["/login", "/cadastro"].includes(requestedPath) &&
-                (user.role === "ROTALOG_ADMIN"
-                    ? requestedPath === "/admin" || requestedPath.startsWith("/admin/")
-                    : user.role === "BUYER_ADMIN"
-                    ? requestedPath.startsWith("/produto/")
-                        ? user.capabilities?.includes("catalog:read")
-                        : requestedPath.startsWith("/comprador/compras")
-                            ? user.capabilities?.includes("purchase:read")
-                            : requestedPath.startsWith("/comprador/carrinho")
-                                ? user.capabilities?.includes("checkout:create")
-                                : requestedPath.startsWith("/comprador")
-                                    ? user.capabilities?.includes("catalog:read") || user.capabilities?.includes("purchase:read")
-                                    : requestedPath === "/"
-                                        ? user.capabilities?.includes("catalog:read") || user.capabilities?.includes("purchase:read")
-                                        : false
-                    : requestedPath.startsWith("/fornecedor"))
-                    ? requestedPath
-                    : defaultPath;
+            const destination = loginDestination(user, locationState?.from, authMode === "api");
 
             navigate(destination, { replace: true });
         } catch (error) {

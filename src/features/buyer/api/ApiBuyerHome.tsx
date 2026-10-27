@@ -1,4 +1,5 @@
 import { Navigate } from "react-router-dom";
+import { defaultUserPath } from "../../../app/routePermissions";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { buyerAuthorized } from "../../services/apiAuth.service";
 import { ApiBuyerCatalog } from "./BuyerPages";
@@ -9,6 +10,7 @@ export function ApiBuyerHome() {
     if (!user) return <Navigate to="/login" replace state={{ from: "/" }} />;
     if (user.role === "ROTALOG_ADMIN") return <Navigate to="/admin" replace />;
     if (user.role === "SUPPLIER_OPERATOR") return <Navigate to="/fornecedor" replace />;
+    if (user.role === "ROUTE_PLANNER") return <Navigate to={defaultUserPath(user)} replace />;
     if (buyerAuthorized(user, "catalog:read")) return <ApiBuyerCatalog />;
     if (buyerAuthorized(user, "purchase:read")) return <Navigate to="/comprador/compras" replace />;
     return <p role="alert">Sua organização não tem permissão para consultar catálogo ou compras.</p>;

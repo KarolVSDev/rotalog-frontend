@@ -1,5 +1,6 @@
 import { authMode } from "../../../shared/api/config";
-import { apiAuthService, authenticatedRequest, subscribeSessionExpired, type ApiUser } from "../../services/apiAuth.service";
+import { authorize, apiAuthService, authenticatedRequest, subscribeSessionExpired, type ApiUser } from "../../services/apiAuth.service";
+import { ApiError } from "../../../shared/api/http";
 
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -81,8 +82,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         let active = true;
         const validate = () => {
             void authenticatedRequest<ApiUser>("/api/v1/me")
-                .then(profile => { if (active) setUser(profile); })
-                .catch(() => { if (active) setSessionError("Não foi possível validar a sessão. Tente novamente."); });
+                .then(profile => { if (active) { setUser(authorize(profile)); setSessionError(""); } })
+                .catch(error => {
+                    if (!active) return;
+                    if (error instanceof ApiError && [401, 403].includes(error.status)) {
+                        apiAuthService.endLocalSession();
+                        return;
+                    }
+                    setSessionError("Não foi possível validar a sessão. Tente novamente.");
+                });
         };
         const interval = window.setInterval(validate, 60_000);
         window.addEventListener("focus", validate);

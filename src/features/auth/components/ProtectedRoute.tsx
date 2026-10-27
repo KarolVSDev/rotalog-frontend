@@ -1,5 +1,6 @@
+import { defaultUserPath, canAccessOperationalRoute } from "../../../app/routePermissions";
 import { authMode } from "../../../shared/api/config";
-import { adminAuthorized, buyerAuthorized, supplierPermissions } from "../../services/apiAuth.service";
+import { adminAuthorized, buyerAuthorized, plannerAuthorized, supplierPermissions } from "../../services/apiAuth.service";
 
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -36,13 +37,13 @@ export function ProtectedRoute({
     if (!allowedRoles.includes(user.role)) {
         return (
             <Navigate
-                to={user.role === "ROTALOG_ADMIN" ? "/admin" : user.role === "BUYER_ADMIN" ? "/" : "/fornecedor"}
+                to={defaultUserPath(user, authMode === "api")}
                 replace
             />
         );
     }
 
-    if (authMode === "api" && allowedRoles.includes("SUPPLIER_OPERATOR") && !supplierPermissions(user).length) {
+    if (authMode === "api" && user.role === "SUPPLIER_OPERATOR" && !supplierPermissions(user).length) {
         return <p role="alert">Acesso não autorizado para este fornecedor.</p>;
     }
     if (authMode === "api" && user.role === "BUYER_ADMIN") {
@@ -53,6 +54,12 @@ export function ProtectedRoute({
     }
     if (authMode === "api" && user.role === "ROTALOG_ADMIN" && !adminAuthorized(user, capability)) {
         return <p role="alert">Acesso não autorizado para esta organização ou operação administrativa.</p>;
+    }
+    if (authMode === "api" && user.role === "ROUTE_PLANNER" && !plannerAuthorized(user, capability)) {
+        return <p role="alert">Acesso não autorizado para planejamento.</p>;
+    }
+    if (authMode === "api" && ["SUPPLIER_OPERATOR", "ROUTE_PLANNER"].includes(user.role) && !canAccessOperationalRoute(user, location.pathname)) {
+        return <section role="alert"><h1>Acesso não autorizado</h1><p>Este usuário não possui permissão para acessar esta página.</p></section>;
     }
     return <>{children}</>;
 }

@@ -23,6 +23,9 @@ import { usersMock } from "../../features/auth/mocks/users.mock";
 import { organizationsMock } from "../../features/organizations/mocks/organizations.mock";
 
 import {
+  operationalRoutes,
+  canAccessOperationalRoute,
+  defaultUserPath,
   canAccessRoute,
   getFirstAllowedRoute,
   getRoutePermission,
@@ -160,10 +163,16 @@ export function AppLayout() {
   }
 
   // Verifica a permissão utilizando a configuração centralizada
+  const planner = apiMode && sessionUser?.role === "ROUTE_PLANNER";
+  const navigation = apiMode && sessionUser ? operationalRoutes(sessionUser) : undefined;
+  const homePath = apiMode && sessionUser ? defaultUserPath(sessionUser) : "/fornecedor";
+  const accountPath = planner ? undefined : "/fornecedor/conta";
+  const portalTitle = planner ? "Portal operacional" : "Portal do fornecedor";
+  const roleLabel = planner ? "Planejador" : "Fornecedor";
   const routeExists =
-    getRoutePermission(location.pathname) !== undefined || location.pathname === "/fornecedor/conta";
+    getRoutePermission(location.pathname) !== undefined || location.pathname === "/fornecedor/conta" || (apiMode && location.pathname === "/fornecedor/planejamento");
 
-  const hasAccess = location.pathname === "/fornecedor/conta" || canAccessRoute(
+  const hasAccess = apiMode && sessionUser ? canAccessOperationalRoute(sessionUser, location.pathname) : location.pathname === "/fornecedor/conta" || canAccessRoute(
     location.pathname,
     activeUser.permissions
   );
@@ -174,6 +183,10 @@ export function AppLayout() {
       {/* Sidebar desktop */}
       <div className="sticky top-0 hidden h-dvh shrink-0 self-start md:block">
         <Sidebar
+          navigation={navigation}
+          homePath={homePath}
+          accountPath={accountPath ?? null}
+          caption={planner ? "PLANEJAMENTO" : undefined}
           permissions={activeUser.permissions}
           pendingOrdersCount={pendingOrdersCount}
           organizationName={activeOrganization.name}
@@ -191,7 +204,7 @@ export function AppLayout() {
 
       {/* Sidebar mobile */}
       {menuOpen && createPortal(
-        <dialog ref={menuRef} id="supplier-mobile-menu" data-supplier-ui aria-label="Menu do fornecedor" aria-modal="true" onCancel={(event) => { event.preventDefault(); setMenuOpen(false); }} onClick={(event) => {
+        <dialog ref={menuRef} id="supplier-mobile-menu" data-supplier-ui aria-label={planner ? "Menu operacional" : "Menu do fornecedor"} aria-modal="true" onCancel={(event) => { event.preventDefault(); setMenuOpen(false); }} onClick={(event) => {
           if (event.target !== event.currentTarget) return;
           const bounds = event.currentTarget.getBoundingClientRect();
           if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) setMenuOpen(false);
@@ -199,6 +212,10 @@ export function AppLayout() {
           <div className="flex h-12 items-center justify-end px-3"><button ref={menuCloseRef} type="button" aria-label="Fechar menu" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-blue-400">✕ Fechar</button></div>
           <div className="h-[calc(100dvh_-_3rem)]" onClick={(event) => { if (event.target instanceof Element && event.target.closest("a[href]")) setMenuOpen(false); }}>
             <Sidebar
+          navigation={navigation}
+          homePath={homePath}
+          accountPath={accountPath ?? null}
+          caption={planner ? "PLANEJAMENTO" : undefined}
           permissions={activeUser.permissions}
           pendingOrdersCount={pendingOrdersCount}
           organizationName={activeOrganization.name}
@@ -217,7 +234,7 @@ export function AppLayout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <SupplierHeader name={sessionUser?.name ?? activeUser.name} organization={activeOrganization.name} onLogout={()=>void logout()}/>
+        <SupplierHeader portalTitle={portalTitle} roleLabel={roleLabel} accountPath={accountPath ?? null} name={sessionUser?.name ?? activeUser.name} organization={activeOrganization.name} onLogout={()=>void logout()}/>
         {/* Botão do menu mobile */}
         <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
           <button
