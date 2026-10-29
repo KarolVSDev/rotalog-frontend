@@ -62,14 +62,15 @@ No Backend do commit 5dda7eaed56185509382113f66b6807cc97fe30d, confirm-payment u
 - fila de pedidos, aceite/recusa, separação e prontidão;
 - dashboard e lista de pedidos prontos para coleta.
 
-A revisão administrativa de geocodificação dos depósitos não está disponível no Frontend. Capacidade logística também não pode ser criada ou ajustada pela interface. A tela de Rotas lista pedidos prontos, mas não faz planejamento, atribuição de motorista nem rastreamento. Imagens de produtos permanecem no IndexedDB local e não usam o serviço de imagens do Backend.
+A revisão administrativa de geocodificação dos depósitos não está disponível no Frontend. Capacidade logística também não pode ser criada ou ajustada pela interface. A tela de Rotas do fornecedor lista pedidos prontos. O portal separado do planejador consulta rotas canônicas, manifesto e rastreamento registrado. As imagens canônicas são consultadas na API com autenticação; IndexedDB permanece exclusivo do fluxo legado.
 
 ### Administração
 
 - cadastro e publicação de produtos no catálogo canônico;
 - leitura do catálogo publicado.
+- exibição autenticada de imagens e gerenciamento da galeria administrativa, incluindo upload, principal, ordenação e remoção de associação.
 
-Planejamento e publicação de rotas, acompanhamento operacional, provas de entrega, disputas, organização de frota e controle de jobs não estão implementados nas telas desta branch.
+O planejador possui consulta, detalhes, manifesto e rastreamento de rotas. O formulário B02.4/B02.5 permite revisão visual; criação, aprovação e publicação ficam bloqueadas até existir consulta autorizada de lotes elegíveis e isolamento por fornecedor no backend. Provas de entrega, disputas, gestão de frota e controle de jobs não estão completos na interface.
 
 No piloto, o portal adicionará compra multi-fornecedor, operações parciais, integração ERP, propostas de rota otimizadas e mapa de rastreamento autorizado.
 
@@ -140,7 +141,11 @@ npm test         # testes unitários e de renderização
 npm run preview  # prévia local do build gerado
 ```
 
-Configure a aplicação por variáveis de ambiente do Vite. O arquivo `.env.example` contém apenas valores locais de exemplo, sem credenciais. Não configure URL de produção neste repositório sem confirmação da equipe de Infraestrutura.
+Configure a aplicação por variáveis de ambiente do Vite. O `.env.example` documenta as variáveis públicas, sem credenciais. Arquivos `.env` e `.env.*` são locais e ignorados, exceto `.env.example`. Não coloque tokens ou credenciais em variáveis `VITE_*`.
+
+Todo `npm run build` exige `VITE_AUTH_MODE=api` e `VITE_API_URL` absoluta HTTP/HTTPS explícita. Não existe fallback de build para mock ou localhost. O exemplo usa mock somente para `npm run dev`; para validar um build local, configure explicitamente `api` e `http://localhost:8000`. Os workflows de CI usam esses valores locais para compilação e testes, sem deploy. Para publicação, a URL HTTPS real deve ser configurada no ambiente do build.
+
+Detalhes: [configuração do build](docs/deploy-configuration.md), [divisão e medidas dos bundles](docs/bundle-loading.md) e [pendências de categorias e produtos no backend](docs/rotalog-v5-pendencias-backend-categorias-produtos.md). As páginas são carregadas sob demanda por portal, com status de carregamento e tratamento de falhas. ExcelJS só é solicitado nas ações de planilha.
 
 Para iniciar a partir do exemplo, copie `.env.example` para `.env.local`:
 
@@ -251,7 +256,7 @@ organização. Para fornecedores, pedidos, produtos, ofertas, depósitos e estoq
 usam a API. A revisão administrativa de depósitos e a criação/alteração de
 capacidade logística não estão disponíveis no Frontend. A tela de Rotas lista
 pedidos prontos, mas não planeja, atribui motorista ou rastreia. Imagens de
-produtos permanecem no IndexedDB e não usam o serviço de imagens do Backend.
+produtos são consultadas na API com autenticação; apenas o fluxo legado mantém imagens no IndexedDB.
 A organização real vem de `/me`, sem associação artificial
 com organizações mock; listas vazias não recebem dados de demonstração. Os dados
 mock anteriores são preservados ao alternar os modos.

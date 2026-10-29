@@ -16,7 +16,7 @@ afterEach(() => {
     sessionStorage.clear();
 });
 
-test("renders the initial marketplace screen without calling the API", () => {
+test("renders the initial marketplace screen without calling the API", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -29,7 +29,7 @@ test("renders the initial marketplace screen without calling the API", () => {
     );
 
     expect(
-        screen.getByRole("heading", {
+        await screen.findByRole("heading", {
             name: "Tudo para o seu negócio em um só lugar",
         }),
     ).toBeTruthy();

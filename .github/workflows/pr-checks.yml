@@ -7,6 +7,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      # Compila e testa a integracao local; este workflow nao realiza deploy.
+      VITE_AUTH_MODE: api
+      VITE_API_URL: http://localhost:8000
 
     steps:
       - name: Checkout do código
