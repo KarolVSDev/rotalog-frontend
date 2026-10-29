@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { manifestFixture, routeFixture } from "../fixtures/planning";
+import { manifestFixture, routeFixture, trackingFixture, pointFixture } from "../fixtures/planning";
 
 async function setup(page: Page) {
     const state = { detailStatus: 200, manifestStatus: 200, network: false, expire: false, delay: 0,
-        role: "ROUTE_PLANNER", capability: true, optional: true, changed: false, calls: [] as string[] };
+        role: "ROUTE_PLANNER", capability: true, optional: true, changed: false, trackingStatus: 200, historyStatus: 200,
+        position: false, trackingNetwork: false, trackingDelay: 0, calls: [] as string[] };
     await page.addInitScript(() => sessionStorage.setItem("rotalog:api-csrf", "csrf"));
     await page.route("http://localhost:8000/**", async route => {
         const request = route.request();
@@ -17,6 +18,16 @@ async function setup(page: Page) {
         expect(request.method()).toBe("GET");
         state.calls.push(url.pathname);
         expect(request.headers()["x-organization-id"]).toBe("org");
+        if (url.pathname.endsWith("/tracking/current")) {
+            if (state.trackingDelay) await new Promise(resolve => setTimeout(resolve, state.trackingDelay));
+            if (state.trackingNetwork) return route.abort();
+            if (state.trackingStatus !== 200) return route.fulfill({ status: state.trackingStatus });
+            return route.fulfill({ json: state.position ? { ...trackingFixture, state: "STALE", position: pointFixture } : trackingFixture });
+        }
+        if (url.pathname.endsWith("/tracking/history")) {
+            if (state.historyStatus !== 200) return route.fulfill({ status: state.historyStatus });
+            return route.fulfill({ json: { route_id: "test-route", items: state.position ? url.searchParams.has("cursor") ? [pointFixture] : [{ ...pointFixture, id: "later", captured_at_device: "2026-10-29T14:00:00Z" }] : [], next_cursor: state.position && !url.searchParams.has("cursor") ? "next" : null, is_synthetic: true } });
+        }
         if (url.pathname === "/api/v1/routes") return route.fulfill({ json: { items: [routeFixture], total: 26,
             page: Number(url.searchParams.get("page")), page_size: 25, is_synthetic: true } });
         if (url.pathname === "/api/v1/routes/test-route") {
@@ -118,11 +129,67 @@ test("supplier and planner without capability cannot request route details", asy
     expect(state.calls).toEqual([]);
 });
 for (const width of [320, 390, 768, 1440]) test(`details accessible without overflow at ${width}px`, async ({ page }, testInfo) => {
-    const state = await setup(page); state.changed = true;
+    const state = await setup(page); state.changed = true; state.position = true;
     await page.setViewportSize({ width, height: 900 });
     await open(page);
     await expect(page.getByText("Falta sintética para teste", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Carregar mais posições" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`route-details-${width}.png`), fullPage: true });
+});
+
+test("tracking starts empty, refreshes manually and paginates capture-ordered history", async ({ page }) => {
+    const state = await setup(page);
+    await open(page);
+    const section = page.getByRole("region", { name: "Acompanhamento da rota" });
+    await expect(section.getByText("Nenhuma localização registrada para esta rota.")).toBeVisible();
+    await expect(section.getByText("Histórico sem posições registradas.")).toBeVisible();
+    state.position = true;
+    await section.getByRole("button", { name: "Atualizar rastreamento" }).click();
+    await expect(section.getByText("Posição desatualizada", { exact: true })).toBeVisible();
+    await expect(section.getByText("-3.100000", { exact: true }).first()).toBeVisible();
+    await section.getByRole("button", { name: "Carregar mais posições" }).click();
+    await expect(section.getByText("2 posição(ões) carregada(s)")).toBeVisible();
+    const positions = section.getByRole("list", { name: "Posições em ordem cronológica" }).getByRole("listitem");
+    await expect(positions.nth(0)).toContainText("29/10/2026, 08:00");
+    await expect(positions.nth(1)).toContainText("29/10/2026, 10:00");
+    await expect(section.getByRole("button", { name: "Carregar mais posições" })).toHaveCount(0);
+    // Advancing browser time must not schedule tracking requests.
+    await page.clock.install();
+    const count = state.calls.filter(path => path.includes("/tracking/")).length;
+    await page.clock.fastForward(90_000);
+    expect(state.calls.filter(path => path.includes("/tracking/")).length).toBe(count);
+    await page.getByRole("button", { name: /Voltar à listagem/ }).click();
+    await page.clock.fastForward(90_000);
+    expect(state.calls.filter(path => path.includes("/tracking/")).length).toBe(count);
+});
+for (const status of [403, 404, 500]) test(`tracking HTTP ${status} preserves route and manifest`, async ({ page }) => {
+    const state = await setup(page); state.trackingStatus = status; state.historyStatus = status;
+    await open(page);
+    const section = page.getByRole("region", { name: "Acompanhamento da rota" });
+    await expect(section.getByRole("alert").first()).toContainText(status === 403 ? "Sem autorização" : status === 404 ? "não encontrado" : "Não foi possível");
+    await expect(page.getByText("Produto sintético de teste", { exact: true })).toBeVisible();
+    state.trackingStatus = 200; state.historyStatus = 200;
+    await section.getByRole("button", { name: "Atualizar rastreamento" }).click();
+    await expect(section.getByText("Histórico sem posições registradas.")).toBeVisible();
+});
+test("tracking loading and transport failure support a manual retry", async ({ page }) => {
+    const state = await setup(page); state.trackingNetwork = true; state.trackingDelay = 700;
+    await open(page);
+    const section = page.getByRole("region", { name: "Acompanhamento da rota" });
+    await expect(section.getByText("Consultando última posição…")).toBeVisible();
+    await expect(section.getByRole("alert")).toContainText("conectar ao Backend");
+    state.trackingNetwork = false; state.trackingDelay = 0;
+    await section.getByRole("button", { name: "Atualizar rastreamento" }).click();
+    await expect(section.getByText("Nenhuma localização registrada para esta rota.")).toBeVisible();
+});
+test("tracking 401 uses session expiration flow", async ({ page }) => {
+    const state = await setup(page);
+    await open(page);
+    const section = page.getByRole("region", { name: "Acompanhamento da rota" });
+    await expect(section.getByText("Histórico sem posições registradas.")).toBeVisible();
+    state.trackingStatus = 401; state.expire = true;
+    await section.getByRole("button", { name: "Atualizar rastreamento" }).click();
+    await expect(page).toHaveURL(/\/login$/);
 });

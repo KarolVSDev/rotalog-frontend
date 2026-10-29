@@ -33,6 +33,7 @@ export type RouteTracking = {
     route_id: string; state: "NOT_STARTED" | "ACTIVE" | "DEGRADED_OFFLINE" | "DEGRADED_PERMISSION" | "STALE" | "ENDED";
     is_stale: boolean; position: TrackingPoint | null; operational_version: number; is_synthetic: true;
 };
+export type TrackingHistory = { route_id: string; items: TrackingPoint[]; next_cursor: string | null; is_synthetic: true };
 export type CanonicalRoute = {
     id: string; state: string; version: number; driver_id: string; vehicle_id: string; updated_at: string;
     warehouse_id: string; plan_version_id: string; stops: RouteStop[]; is_synthetic: true;

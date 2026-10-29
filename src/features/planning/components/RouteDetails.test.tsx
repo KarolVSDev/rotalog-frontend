@@ -1,11 +1,15 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { RouteDetails } from "./RouteDetails";
 import { RouteManifest } from "./RouteManifest";
 import { PlanningRepository } from "../api/planningRepository";
-import { manifestFixture, routeFixture } from "../../../../tests/fixtures/planning";
+import { manifestFixture, routeFixture, trackingFixture } from "../../../../tests/fixtures/planning";
 
-afterEach(cleanup);
+beforeEach(() => {
+    vi.spyOn(PlanningRepository.prototype, "trackingCurrent").mockResolvedValue(trackingFixture);
+    vi.spyOn(PlanningRepository.prototype, "trackingHistory").mockResolvedValue({ route_id: "test-route", items: [], next_cursor: null, is_synthetic: true });
+});
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 test("orders stops and keeps route visible when manifest fails, with independent retry", async () => {
     const repository = new PlanningRepository("org");
     const detail = vi.spyOn(repository, "detail").mockResolvedValue(routeFixture);
@@ -19,7 +23,7 @@ test("orders stops and keeps route visible when manifest fails, with independent
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("Manifesto indisponível"));
     fireEvent.click(screen.getByRole("button", { name: "Tentar carregar manifesto novamente" }));
     expect(await screen.findByText("Carga ainda não conferida")).toBeTruthy();
-    expect(detail).toHaveBeenCalledTimes(1);
+    expect(detail).toHaveBeenCalledTimes(2); // Details and operational state in tracking.
     expect(manifest).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole("button", { name: /Voltar à listagem/ }));
     expect(close).toHaveBeenCalledOnce();

@@ -1,4 +1,11 @@
-import type { CanonicalRoute, CargoManifest } from "../../src/features/planning/api/planningTypes";
+import type { CanonicalRoute, CargoManifest, RouteTracking, TrackingPoint } from "../../src/features/planning/api/planningTypes";
+
+export const pointFixture: TrackingPoint = { id: "point-1", device_id: "test-device", sequence_no: 1,
+    captured_at_device: "2026-10-29T12:00:00Z", received_at_server: "2026-10-29T12:01:00Z",
+    latitude: "-3.100000", longitude: "-60.000000", accuracy_meters: "10.00", speed_mps: null,
+    bearing_degrees: null, is_mocked_by_os: false, flags: [] };
+export const trackingFixture: RouteTracking = { route_id: "test-route", state: "NOT_STARTED", is_stale: true,
+    position: null, operational_version: 1, is_synthetic: true };
 
 export const manifestFixture: CargoManifest = {
     route_id: "test-route", route_version: 1, manifest_version: 1, fingerprint: "synthetic",

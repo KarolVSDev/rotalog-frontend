@@ -14,3 +14,9 @@ export function dateOnly(value?: string | null): string {
 export function stopState(value: string): string {
     return ({ PENDING: "Pendente", COMPLETED: "Concluída", DELIVERY_IN_PROGRESS: "Entrega em andamento", STARTED: "Iniciada", PROOF_PENDING: "Comprovação pendente", CANCELLED: "Cancelada" } as Record<string, string>)[value] ?? value;
 }
+import type { TrackingPoint } from "../api/planningTypes";
+
+export function chronologicalPoints(points: TrackingPoint[]): TrackingPoint[] {
+    return [...new Map(points.map(point => [point.id, point])).values()].sort((a, b) =>
+        Date.parse(a.captured_at_device) - Date.parse(b.captured_at_device) || a.id.localeCompare(b.id));
+}

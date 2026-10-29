@@ -1,8 +1,22 @@
 import { expect, test, vi } from "vitest";
-import { PlanningRepository, planningError, routeDetailError } from "./planningRepository";
+import { PlanningRepository, planningError, routeDetailError, trackingError } from "./planningRepository";
 import { ApiError } from "../../../shared/api/http";
 import type { RoutesPage } from "./planningTypes";
-import { routeFixture, manifestFixture } from "../../../../tests/fixtures/planning";
+import { routeFixture, manifestFixture, trackingFixture } from "../../../../tests/fixtures/planning";
+
+test("tracking GET contracts preserve nullable position, opaque cursor, organization and abort signal", async () => {
+    const history = { route_id: "test-route", items: [], next_cursor: null, is_synthetic: true };
+    const transport = vi.fn().mockResolvedValueOnce(trackingFixture).mockResolvedValueOnce(history);
+    const repository = new PlanningRepository("org", transport);
+    const signal = new AbortController().signal;
+    expect(await repository.trackingCurrent("test-route", signal)).toBe(trackingFixture);
+    expect(await repository.trackingHistory("test-route", "a+/=", signal)).toBe(history);
+    expect(transport.mock.calls.map(call => call[0])).toEqual(["/api/v1/routes/test-route/tracking/current", "/api/v1/routes/test-route/tracking/history?page_size=50&cursor=a%2B%2F%3D"]);
+    for (const call of transport.mock.calls) expect(call[1]).toEqual({ headers: { "X-Organization-Id": "org" }, signal });
+});
+test.each([401, 403, 404, 422, 429, 500])("tracking maps HTTP %i to a diagnostic", status => {
+    expect(trackingError(new ApiError(status))).toMatch(/Sessão expirada|Sem autorização|não encontrado|inválida|Muitas consultas|Não foi possível/);
+});
 
 test("detail and manifest use canonical GET endpoints and preserve organization and cancellation", async () => {
     const transport = vi.fn().mockResolvedValueOnce(routeFixture).mockResolvedValueOnce(manifestFixture);

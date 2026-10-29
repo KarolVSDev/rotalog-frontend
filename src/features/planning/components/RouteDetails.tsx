@@ -4,6 +4,7 @@ import { routeStates, type CanonicalRoute } from "../api/planningTypes";
 import { dateOnly, dateTime, detailButton, detailCard, text } from "./planningPresentation";
 import { RouteStops } from "./RouteStops";
 import { RouteManifest } from "./RouteManifest";
+import { RouteTracking } from "./RouteTracking";
 
 export function RouteDetails({ id, repository, onClose }: { id: string; repository: PlanningRepository; onClose: () => void }) {
     const heading = useRef<HTMLHeadingElement>(null);
@@ -37,6 +38,7 @@ export function RouteDetails({ id, repository, onClose }: { id: string; reposito
             </section>
             <RouteStops stops={route.stops}/>
             <RouteManifest key={id} id={id} repository={repository}/>
+            <RouteTracking key={`tracking:${id}`} route={route} repository={repository}/>
         </>}
     </div>;
 }

@@ -1,6 +1,6 @@
 import { authenticatedRequest } from "../../services/apiAuth.service";
 import { ApiError } from "../../../shared/api/http";
-import type { CanonicalRoute, CargoManifest, RouteFilters, RoutesPage } from "./planningTypes";
+import type { CanonicalRoute, CargoManifest, RouteFilters, RoutesPage, RouteTracking, TrackingHistory } from "./planningTypes";
 
 type Transport = typeof authenticatedRequest;
 export class PlanningRepository {
@@ -13,6 +13,18 @@ export class PlanningRepository {
     private options(signal?: AbortSignal): RequestInit {
         if (!this.organizationId) throw new Error("Organização não disponível. Entre novamente.");
         return { headers: { "X-Organization-Id": this.organizationId }, signal };
+    }
+    async trackingCurrent(id: string, signal?: AbortSignal): Promise<RouteTracking> {
+        const result = await this.transport<RouteTracking>(`/api/v1/routes/${encodeURIComponent(id)}/tracking/current`, this.options(signal));
+        if (result.route_id !== id || !(result.position === null || typeof result.position === "object")) throw new Error("Resposta inválida de rastreamento.");
+        return result;
+    }
+    async trackingHistory(id: string, cursor: string | null = null, signal?: AbortSignal): Promise<TrackingHistory> {
+        const query = new URLSearchParams({ page_size: "50" });
+        if (cursor !== null) query.set("cursor", cursor);
+        const result = await this.transport<TrackingHistory>(`/api/v1/routes/${encodeURIComponent(id)}/tracking/history?${query}`, this.options(signal));
+        if (result.route_id !== id || !Array.isArray(result.items) || !(result.next_cursor === null || typeof result.next_cursor === "string")) throw new Error("Resposta inválida do histórico de posições.");
+        return result;
     }
     async detail(id: string, signal?: AbortSignal): Promise<CanonicalRoute> {
         const result = await this.transport<CanonicalRoute>(`/api/v1/routes/${encodeURIComponent(id)}`, this.options(signal));
@@ -38,6 +50,17 @@ export class PlanningRepository {
         }
         return result;
     }
+}
+export function trackingError(error: unknown): string {
+    if (error instanceof ApiError) {
+        if (error.status === 401) return "Sessão expirada. Entre novamente.";
+        if (error.status === 403) return "Sem autorização para consultar o rastreamento.";
+        if (error.status === 404) return "Rastreamento não encontrado ou indisponível para esta sessão.";
+        if (error.status === 422) return "Consulta de histórico inválida. Atualize o rastreamento para reiniciar a consulta.";
+        if (error.status === 429) return "Muitas consultas. Aguarde antes de atualizar o rastreamento.";
+        return "Não foi possível consultar o rastreamento. Tente novamente.";
+    }
+    return error instanceof Error ? error.message : "Não foi possível consultar o rastreamento.";
 }
 export function routeDetailError(error: unknown, manifest = false): string {
     const resource = manifest ? "Manifesto" : "Rota";
