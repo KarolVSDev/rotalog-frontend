@@ -3,6 +3,18 @@ import { PlanningRepository, planningError, routeDetailError, trackingError } fr
 import { ApiError } from "../../../shared/api/http";
 import type { RoutesPage } from "./planningTypes";
 import { routeFixture, manifestFixture, trackingFixture } from "../../../../tests/fixtures/planning";
+import { manualPlanFixture, planFixture, planId } from "../../../../tests/fixtures/route-plan";
+
+test("planning writes preserve exact versions, idempotency keys and disable automatic auth replay", async () => {
+    const transport = vi.fn().mockResolvedValue(planFixture);
+    const repository = new PlanningRepository("org", transport);
+    await repository.createPlan(manualPlanFixture, "create-key");
+    await repository.approvePlan(planId, 1, "approve-key");
+    await repository.publishPlan(planId, 2, "publish-key");
+    expect(transport.mock.calls.map(call => call[2])).toEqual([false, false, false]);
+    expect(transport.mock.calls.map(call => JSON.parse(call[1].body))).toEqual([manualPlanFixture, { expected_version: 1 }, { expected_version: 2 }]);
+    expect(transport.mock.calls.map(call => call[1].headers["Idempotency-Key"])).toEqual(["create-key", "approve-key", "publish-key"]);
+});
 
 test("tracking GET contracts preserve nullable position, opaque cursor, organization and abort signal", async () => {
     const history = { route_id: "test-route", items: [], next_cursor: null, is_synthetic: true };

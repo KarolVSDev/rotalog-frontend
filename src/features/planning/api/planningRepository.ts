@@ -1,6 +1,7 @@
 import { authenticatedRequest } from "../../services/apiAuth.service";
 import { ApiError } from "../../../shared/api/http";
 import type { CanonicalRoute, CargoManifest, RouteFilters, RoutesPage, RouteTracking, TrackingHistory } from "./planningTypes";
+import type { Driver, Vehicle, ManualPlan, RoutePlan } from "./planTypes";
 
 type Transport = typeof authenticatedRequest;
 export class PlanningRepository {
@@ -13,6 +14,30 @@ export class PlanningRepository {
     private options(signal?: AbortSignal): RequestInit {
         if (!this.organizationId) throw new Error("Organização não disponível. Entre novamente.");
         return { headers: { "X-Organization-Id": this.organizationId }, signal };
+    }
+    drivers(signal?: AbortSignal): Promise<Driver[]> {
+        return this.transport<Driver[]>("/api/v1/drivers", this.options(signal));
+    }
+    vehicles(signal?: AbortSignal): Promise<Vehicle[]> {
+        return this.transport<Vehicle[]>("/api/v1/vehicles", this.options(signal));
+    }
+    async plan(id: string, signal?: AbortSignal): Promise<RoutePlan> {
+        const result = await this.transport<RoutePlan>(`/api/v1/route-plan-versions/${encodeURIComponent(id)}`, this.options(signal));
+        if (result.id !== id || !Number.isInteger(result.version) || result.version < 1 || !result.snapshot) throw new Error("Resposta inválida de proposta.");
+        return result;
+    }
+    private postPlan<T>(path: string, body: unknown, key: string): Promise<T> {
+        const options = this.options();
+        return this.transport<T>(path, { ...options, method: "POST", headers: { ...options.headers, "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(body) }, false);
+    }
+    createPlan(body: ManualPlan, key: string): Promise<RoutePlan> {
+        return this.postPlan("/api/v1/route-plan-versions", body, key);
+    }
+    approvePlan(id: string, version: number, key: string): Promise<RoutePlan> {
+        return this.postPlan(`/api/v1/route-plan-versions/${encodeURIComponent(id)}/approve`, { expected_version: version }, key);
+    }
+    publishPlan(id: string, version: number, key: string): Promise<CanonicalRoute> {
+        return this.postPlan(`/api/v1/route-plan-versions/${encodeURIComponent(id)}/publish`, { expected_version: version }, key);
     }
     async trackingCurrent(id: string, signal?: AbortSignal): Promise<RouteTracking> {
         const result = await this.transport<RouteTracking>(`/api/v1/routes/${encodeURIComponent(id)}/tracking/current`, this.options(signal));
@@ -50,6 +75,16 @@ export class PlanningRepository {
         }
         return result;
     }
+}
+export function planError(error: unknown): string {
+    if (error instanceof ApiError) {
+        if (error.status === 409) return error.code === "IDEMPOTENCY_KEY_REUSED" ? "Chave de operação já utilizada com outro conteúdo. Consulte a proposta antes de continuar." : "Conflito de versão ou regra operacional. Consulte novamente a proposta e revise os dados.";
+        if (error.status === 422) return "Dados inválidos. Revise os campos, quantidades e janelas.";
+        if (error.status === 403) return "Sem autorização para esta operação de planejamento.";
+        if (error.status === 404) return "Proposta não encontrada ou indisponível para esta sessão.";
+        if (error.status === 401) return "Sessão expirada. Entre novamente.";
+    }
+    return "Não foi possível confirmar o resultado. Não inicie outra operação: consulte a proposta ou repita a mesma tentativa com os mesmos dados.";
 }
 export function trackingError(error: unknown): string {
     if (error instanceof ApiError) {

@@ -5,6 +5,7 @@ import { PageHeader } from "../../../shared/components/PageHeader";
 import { PlanningRepository, planningError } from "../api/planningRepository";
 import { routeStates, type RouteFilters, type RoutesPage } from "../api/planningTypes";
 import { RouteDetails } from "../components/RouteDetails";
+import { PlanningWorkspace } from "../components/PlanningWorkspace";
 
 const button = "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50";
 const select = "mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
@@ -22,6 +23,8 @@ export function PlanningDashboard() {
     const [query, setQuery] = useState<RouteFilters & { page: number }>({ page: 1, state: "", active: "" });
     const [attempt, setAttempt] = useState(0);
     const [selected, setSelected] = useState<string | null>(null);
+    const [planning, setPlanning] = useState(false);
+    const planTrigger = useRef<HTMLButtonElement | null>(null);
     const detailsTrigger = useRef<HTMLButtonElement | null>(null);
     const [result, setResult] = useState<{ key: string; data?: RoutesPage; error?: string } | null>(null);
     const key = JSON.stringify([user?.id, user?.organization_id, query, attempt]);
@@ -41,8 +44,9 @@ export function PlanningDashboard() {
 
     if (!authorized) return <p role="alert">Acesso não autorizado para planejamento.</p>;
     const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
-    return <><div hidden={selected !== null} className="space-y-6">
+    return <><div hidden={selected !== null || planning} className="space-y-6">
         <PageHeader title="Planejamento" subtitle="Consulte as rotas da operação e acompanhe sua organização para coleta e entrega." actions={<button type="button" className={button} disabled={loading} onClick={() => setAttempt(value => value + 1)}>Atualizar rotas</button>}/>
+        <div><button type="button" ref={planTrigger} className={button} onClick={() => setPlanning(true)}>Planejar nova rota</button></div>
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="planning-filters-title">
             <h2 id="planning-filters-title" className="text-lg font-bold">Consulta de rotas</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">Selecione os filtros para consultar as rotas canônicas publicadas.</p>
@@ -80,5 +84,5 @@ export function PlanningDashboard() {
                 </nav>
             </>}
         </section>
-    </div>{selected && <RouteDetails key={`${user?.id}:${user?.organization_id}:${selected}`} id={selected} repository={repository} onClose={() => { setSelected(null); requestAnimationFrame(() => detailsTrigger.current?.focus()); }}/>}</>;
+    </div>{planning && <PlanningWorkspace key={`${user?.id}:${user?.organization_id}`} repository={repository} organizationId={user?.organization_id ?? ""} onClose={() => { setPlanning(false); requestAnimationFrame(() => planTrigger.current?.focus()); }} onPublished={route => { setAttempt(value => value + 1); setPlanning(false); setSelected(route.id); detailsTrigger.current = planTrigger.current; }}/>} {selected && <RouteDetails key={`${user?.id}:${user?.organization_id}:${selected}`} id={selected} repository={repository} onClose={() => { setSelected(null); requestAnimationFrame(() => detailsTrigger.current?.focus()); }}/>}</>;
 }
