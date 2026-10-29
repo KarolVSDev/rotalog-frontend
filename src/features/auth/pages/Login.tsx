@@ -210,50 +210,6 @@ export function Login() {
                             </button>
                         </form>
 
-                        {/* Login social */}
-                        <div className="my-4 flex items-center gap-3">
-                            <div className="h-px flex-1 bg-slate-200" />
-                            <span className="text-xs text-slate-500">
-                                Ou continue com
-                            </span>
-                            <div className="h-px flex-1 bg-slate-200" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setMessage(
-                                        "O login com Google ainda não está disponível."
-                                    )
-                                }
-                                className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-3 text-xs font-medium transition hover:bg-slate-50"
-                            >
-                                <span className="text-base font-bold text-[#4285F4]">
-                                    G
-                                </span>
-                                Google
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setMessage(
-                                        "O login com Microsoft ainda não está disponível."
-                                    )
-                                }
-                                className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-3 text-xs font-medium transition hover:bg-slate-50"
-                            >
-                                <span className="grid h-4 w-4 grid-cols-2 gap-[2px]">
-                                    <span className="bg-[#F25022]" />
-                                    <span className="bg-[#7FBA00]" />
-                                    <span className="bg-[#00A4EF]" />
-                                    <span className="bg-[#FFB900]" />
-                                </span>
-                                Microsoft
-                            </button>
-                        </div>
-
                         <p className="mt-4 text-center text-sm text-slate-500">
                             Não tem uma conta?{" "}
                             <Link
