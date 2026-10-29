@@ -7,6 +7,7 @@ import { authMode } from "../shared/api/config";
 
 import { PlanningDashboard } from "../features/planning/pages/PlanningDashboard";
 import { NotFoundPage } from "../shared/pages/NotFoundPage";
+import { RouteErrorPage } from "../shared/pages/RouteErrorPage";
 import { SupplierRoutes } from "../features/orders/pages/SupplierRoutes";
 import { SupplierAccount } from "../features/account/pages/SupplierAccount";
 import { ProductCatalog } from "../features/catalog/pages/ProductCatalog";
@@ -42,7 +43,7 @@ export const router = createBrowserRouter([
     {
         path: "/",
         element: <MarketplaceLayout />,
-        errorElement: <NotFoundPage />,
+        errorElement: <RouteErrorPage />,
         children: [
             { index: true, element: authMode === "api" ? <ApiBuyerHome /> : <ProductCatalog /> },
             {
@@ -84,8 +85,8 @@ export const router = createBrowserRouter([
             },
         ],
     },
-    { path: "/login", element: <Login /> },
-    { path: "/cadastro", element: <Register /> },
+    { path: "/login", element: <Login />, errorElement: <RouteErrorPage /> },
+    { path: "/cadastro", element: <Register />, errorElement: <RouteErrorPage /> },
     {
         path: "/admin",
         element: (
@@ -93,7 +94,7 @@ export const router = createBrowserRouter([
                 <AdminLayout />
             </ProtectedRoute>
         ),
-        errorElement: <NotFoundPage />,
+        errorElement: <RouteErrorPage />,
         children: [
             { index: true, element: <AdminOverview /> },
             { path: "products", element: <AdminCatalog /> },
@@ -111,7 +112,7 @@ export const router = createBrowserRouter([
                 {authMode === "api" ? <ApiOrdersProvider><AppLayout /></ApiOrdersProvider> : <AppLayout />}
             </ProtectedRoute>
         ),
-        errorElement: <NotFoundPage />,
+        errorElement: <RouteErrorPage />,
         children: [
             { index: true, element: authMode === "api" ? <ApiSupplierDashboard /> : <SupplierDashboard /> },
             { path: "pedidos", element: authMode === "api" ? <ApiSupplierOrders /> : <SupplierOrders /> },

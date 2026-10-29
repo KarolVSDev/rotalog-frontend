@@ -338,12 +338,17 @@ function SessionAdminProductCreate() {
         setVerificationError("");
         try {
             const published = await repository.detail(product.id);
+            if (published.publication_state !== "PUBLISHED") {
+                workflow.setCreatedProduct(published);
+                setVerificationError("A consulta por ID confirmou que o produto ainda não está publicado. Administradores podem consultar rascunhos pelo ID, mas ainda não existe listagem administrativa de rascunhos. Não repita a publicação automaticamente.");
+                return;
+            }
             workflow.setCreatedProduct(published);
             workflow.setPublishedProduct(published);
             workflow.setPublicationStatus("published");
         } catch (failure) {
             setVerificationError(failure instanceof Error && "status" in failure && failure.status === 404
-                ? "A consulta segura não encontrou este produto publicado. O Backend não permite consultar rascunhos; não repita a publicação."
+                ? "A consulta por ID não encontrou este produto. Administradores podem consultar rascunhos pelo ID, mas ainda não existe listagem administrativa de rascunhos. Não repita a publicação."
                 : catalogError(failure));
         }
     }
@@ -352,7 +357,7 @@ function SessionAdminProductCreate() {
     const canStartAnother = workflow.publicationStatus === "published";
     return <div className="space-y-5">
         <PageHeader title="Cadastrar produto canônico" subtitle="Informe os dados do produto e da embalagem. Preço e estoque são cadastrados pelo fornecedor."/>
-        {workflow.creationUncertain && !product && <section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h2 className="font-bold">Resultado do cadastro não confirmado</h2><p className="mt-1 leading-6">Não repita este cadastro. O Backend não oferece consulta de rascunhos nem recuperação após recarregar a página. Esta informação fica somente na sessão atual.</p></section>}
+        {workflow.creationUncertain && !product && <section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h2 className="font-bold">Resultado do cadastro não confirmado</h2><p className="mt-1 leading-6">Não repita este cadastro. Administradores podem consultar rascunhos pelo ID, mas ainda não existe listagem administrativa de rascunhos. Sem o ID retornado, esta tela não consegue recuperar o resultado do cadastro.</p></section>}
         {product && <section className={`${cardClass} border-blue-200`} aria-label="Produto criado nesta sessão">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">{workflow.publicationStatus === "published" ? "Produto publicado" : "Rascunho criado"}</p><h2 className="mt-1 text-xl font-bold text-slate-900">{product.name}</h2><p className="mt-1 text-sm text-slate-600">{product.brand} · {product.packaging_type}</p></div><span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${workflow.publicationStatus === "published" ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>{workflow.publicationStatus === "published" ? "Publicado" : publicationLabel(product.publication_state)}</span></div>
             {workflow.publicationStatus !== "published" && <p className="mt-4 text-sm leading-6 text-slate-600">O produto foi criado como rascunho. Ele não aparece no catálogo publicado até a confirmação explícita da publicação.</p>}
@@ -364,7 +369,7 @@ function SessionAdminProductCreate() {
                 {workflow.publicationStatus === "published" && <Link className={primaryButton} to="/admin/products">Consultar catálogo publicado</Link>}
                 {canStartAnother && <button type="button" className={secondaryButton} disabled={submitting || imageBusy} onClick={() => { setImageJobs([]); setImageSnapshot(null); setImageMessage(""); workflow.setCreatedProduct(null); workflow.setCreationUncertain(false); workflow.setPublicationStatus("not-started"); workflow.setPublishedProduct(null); }}>Cadastrar outro produto</button>}
             </div>
-            {(workflow.publicationStatus === "uncertain" || workflow.publicationStatus === "rejected") && <p className="mt-3 text-xs leading-5 text-slate-500">A consulta acima é somente leitura. Não haverá repetição automática da publicação; rascunhos não podem ser recuperados pela API atual.</p>}
+            {(workflow.publicationStatus === "uncertain" || workflow.publicationStatus === "rejected") && <p className="mt-3 text-xs leading-5 text-slate-500">A consulta acima é somente leitura e permite consultar rascunhos pelo ID. Ainda não existe listagem administrativa de rascunhos. Não haverá repetição automática da publicação.</p>}
             {imageMessage && <p role="status" className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-950">{imageMessage}</p>}
             <AdminProductGallery key={product.id} productId={product.id} initialJobs={imageJobs} snapshot={imageSnapshot} disabled={submitting || !["not-started", "published"].includes(workflow.publicationStatus)} onBusy={setImageBusy} onGallery={gallery => {
                 setImageSnapshot(gallery);
@@ -468,7 +473,7 @@ function SessionAdminProductCreate() {
                     <div className="rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-950">
                         <h2 className="font-bold">Cadastro canônico</h2>
                         <p className="mt-1">O cadastro cria um rascunho. Preços, estoque, depósitos e ofertas são gerenciados pelo fornecedor.</p>
-                        <p className="mt-2 text-blue-800">Rascunhos não podem ser recuperados após sair desta sessão.</p>
+                        <p className="mt-2 text-blue-800">Rascunhos podem ser consultados pelo ID por administradores. Ainda não existe listagem administrativa de rascunhos; guarde o ID retornado.</p>
                     </div>
                 </aside>
             </div>

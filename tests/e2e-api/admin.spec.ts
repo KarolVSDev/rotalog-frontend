@@ -31,6 +31,7 @@ type State = {
     publishStatus: number;
     adminRequests: string[];
     catalogPages: { page: number; pageSize: number }[];
+    draftDetail: boolean;
 };
 
 async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
@@ -49,6 +50,7 @@ async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
         publishStatus: 0,
         adminRequests: [],
         catalogPages: [],
+        draftDetail: false,
     };
     if (restore) await page.addInitScript(() => sessionStorage.setItem("rotalog:api-csrf", "synthetic-csrf"));
     await page.route("http://localhost:8000/**", async route => {
@@ -112,7 +114,7 @@ async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
         }
         if (path.startsWith("/api/v1/products/") && request.method() === "GET") {
             const id = path.split("/").at(-1);
-            const found = state.products.find(item => item.id === id && item.publication_state === "PUBLISHED");
+            const found = state.products.find(item => item.id === id && (state.draftDetail || item.publication_state === "PUBLISHED"));
             return found
                 ? route.fulfill({ json: found })
                 : route.fulfill({ status: 404, json: { error: { code: "PRODUCT_NOT_FOUND", message: "Produto não encontrado.", request_id: "request-123" } } });
@@ -401,8 +403,23 @@ test("conflito de publicação preserva rascunho e oferece somente consulta segu
     await expect(page.getByRole("alert")).toContainText("versão do produto mudou");
     await expect(page.getByRole("button", { name: "Publicar produto" })).toHaveCount(0);
     await page.getByRole("button", { name: "Consultar se foi publicado" }).click();
-    await expect(page.getByText(/Backend não permite consultar rascunhos/)).toBeVisible();
+    await expect(page.getByText(/A consulta por ID não encontrou este produto/)).toBeVisible();
     expect(state.publishRequests).toEqual([{ expected_version: 1 }]);
+});
+
+test("consulta por ID de rascunho não apresenta publicação bem-sucedida", async ({ page }) => {
+    const state = await setup(page);
+    state.publishStatus = 409;
+    state.draftDetail = true;
+    await page.goto("/admin/products/new");
+    await fillValidProduct(page);
+    await page.getByRole("button", { name: "Cadastrar como rascunho" }).click();
+    await page.getByRole("button", { name: "Publicar produto" }).click();
+    await page.getByRole("button", { name: "Consultar se foi publicado" }).click();
+    await expect(page.getByText(/A consulta por ID confirmou que o produto ainda não está publicado/)).toBeVisible();
+    await expect(page.getByText("Produto publicado", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Rascunho criado", { exact: true })).toBeVisible();
+    expect(state.publishRequests).toHaveLength(1);
 });
 
 test("falha de rede após cadastro não repete POST e explica a limitação", async ({ page }) => {
