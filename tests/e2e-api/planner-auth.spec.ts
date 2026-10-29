@@ -18,6 +18,7 @@ async function setup(page: Page, restore = true, role = "ROUTE_PLANNER") {
         if (path === "/api/v1/me") return route.fulfill({ status: state.meStatus, json: user });
         if (/\/auth\/(login|refresh)$/.test(path)) return route.fulfill({ json: { access_token: "synthetic", token_type: "bearer", expires_in: 600, csrf_token: "synthetic-csrf", user } });
         if (path === "/api/v1/auth/logout") return route.fulfill({ status: 204 });
+        if (!supplier && path === "/api/v1/routes") return route.fulfill({ json: { items: [], total: 0, page: 1, page_size: 25, is_synthetic: true } });
         if (supplier && path === "/api/v1/supplier-orders") return route.fulfill({ json: { items: [], total: 0, page: 1, page_size: 100 } });
         return route.fulfill({ status: 403, json: { error: { code: "CAPABILITY_REQUIRED" } } });
     });
@@ -36,7 +37,7 @@ test("planner logs in, restores, uses shared navigation and logs out", async ({ 
     await expect(page.getByRole("link", { name: "Minha conta", exact: true })).toHaveCount(0);
     await page.reload();
     await expect(page.getByRole("heading", { name: "Planejamento", exact: true })).toBeVisible();
-    expect(state.requests.every(path => /\/auth\/|\/me$/.test(path))).toBe(true);
+    expect(state.requests.every(path => /\/auth\/|\/me$|^\/api\/v1\/routes$/.test(path))).toBe(true);
     await page.getByRole("button", { name: "Sair", exact: true }).click();
     await expect(page).toHaveURL(/\/login$/);
     await page.goBack();
@@ -50,7 +51,7 @@ test("planner cannot mount commercial pages or administrative pages", async ({ p
     }
     await page.goto("/admin/products/new");
     await expect(page).toHaveURL(/\/fornecedor\/planejamento$/);
-    expect(state.requests.every(path => /\/auth\/|\/me$/.test(path))).toBe(true);
+    expect(state.requests.every(path => /\/auth\/|\/me$|^\/api\/v1\/routes$/.test(path))).toBe(true);
 });
 test("supplier cannot mount planning and retains supplier navigation", async ({ page }) => {
     await setup(page, true, "SUPPLIER_OPERATOR");
