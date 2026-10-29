@@ -3,10 +3,12 @@ import { useState } from "react";
 export function ProductImage({
     name,
     src,
+    alt,
     className = "h-36 w-full",
 }: {
     name: string;
     src?: string | null;
+    alt?: string;
     className?: string;
 }) {
     const [failedSource, setFailedSource] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export function ProductImage({
             aria-label={showImage ? undefined : `Imagem de ${name} não disponível`}
         >
             {showImage ? (
-                <img src={src} alt={`Imagem de ${name}`} onError={() => setFailedSource(src)} className="h-full w-full object-contain" />
+                <img src={src} alt={alt || `Imagem de ${name}`} onError={() => setFailedSource(src)} className="h-full w-full object-contain" />
             ) : (
                 <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-12 w-12">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m4 7 8-4 8 4v10l-8 4-8-4V7Z" />

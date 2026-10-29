@@ -1,3 +1,4 @@
+import { AuthenticatedProductImage } from "../../../shared/components/AuthenticatedProductImage";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { cents, formatMoney } from "../../orders/api/orderAdapter";
@@ -111,6 +112,7 @@ export function BuyerApiCatalog() {
                             );
                             return (
                                 <article key={product.id} className={`${card} flex min-w-0 flex-col`}>
+                                    <AuthenticatedProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary) ?? lowestPrice?.product_image} name={product.name} className="mb-4 h-36 w-full"/>
                                     <span className="w-fit rounded-md bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700">
                                         {productCategory(product.category)}
                                     </span>

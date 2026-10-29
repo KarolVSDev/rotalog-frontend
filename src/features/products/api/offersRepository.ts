@@ -1,6 +1,7 @@
 import { authenticatedRequest } from "../../services/apiAuth.service";
 import { ApiError } from "../../../shared/api/http";
 import type { CatalogProduct } from "./catalogRepository";
+import type { CanonicalProductImage } from "../../../shared/api/productImageTypes";
 
 export type Warehouse = {
     id: string; supplier_organization_id: string; name: string; address: string;
@@ -65,6 +66,7 @@ export type Offer = {
     supplier_name: string; warehouse_id: string; region: string; unit_price: string;
     currency: "BRL"; minimum_order_quantity: number; available_quantity: number;
     version: number; is_active: boolean; demo_run_id: string; is_synthetic: true;
+    product_image?: CanonicalProductImage | null;
 };
 export type OfferPage = {items: Offer[]; total: number; page: number; page_size: number};
 type WarehousePage = {items: Warehouse[]; total: number; page: number; page_size: number};

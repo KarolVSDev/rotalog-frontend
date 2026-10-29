@@ -1,4 +1,4 @@
-import { ApiError, request } from "../../shared/api/http";
+import { ApiError, request, requestBlob, assertProductImagePath } from "../../shared/api/http";
 import type { AuthUser, LoginCredentials } from "./auth.service";
 import type { Permission } from "../auth/mocks/users.mock";
 
@@ -54,14 +54,15 @@ export function refreshSession(): Promise<void> {
         .finally(() => { refreshPromise = null; });
     return refreshPromise;
 }
-export async function authenticatedRequest<T>(path: string, options: RequestInit = {}, replayUnauthorized = true): Promise<T> {
+export async function authenticatedRequest<T>(path: string, options: RequestInit = {}, replayUnauthorized = true, binary = false): Promise<T> {
     const requestGeneration = generation;
     if (!accessToken || Date.now() >= expiresAt - 30_000) await refreshSession();
     if (!replayUnauthorized && requestGeneration !== generation) throw new ApiError(401);
     const send = () => {
+        if (binary && requestGeneration !== generation) throw new ApiError(401);
         const headers = new Headers(options.headers);
         headers.set("Authorization", `Bearer ${accessToken}`);
-        return request<T>(path, { ...options, headers });
+        return binary ? requestBlob(path, { ...options, headers }) as Promise<T> : request<T>(path, { ...options, headers });
     };
     const sentToken = accessToken;
     try { return await send(); }
@@ -75,6 +76,15 @@ export async function authenticatedRequest<T>(path: string, options: RequestInit
             throw retryError;
         }
     }
+}
+export async function authenticatedBlobRequest(path: string, organizationId: string, signal?: AbortSignal): Promise<Blob> {
+    assertProductImagePath(path);
+    if (!organizationId) throw new ApiError(403);
+    const current = generation;
+    const blob = await authenticatedRequest<Blob>(path, { headers: { "X-Organization-Id": organizationId }, signal }, true, true);
+    if (signal?.aborted) throw new DOMException("Requisição cancelada", "AbortError");
+    if (current !== generation) throw new ApiError(401);
+    return blob;
 }
 export function supplierPermissions(user: AuthUser): Permission[] {
     if (user.role !== "SUPPLIER_OPERATOR" || !user.organizations?.some(org => org.id === user.organization_id && org.role === "SUPPLIER_OPERATOR")) return [];

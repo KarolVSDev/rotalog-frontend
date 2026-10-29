@@ -11,7 +11,7 @@ import { useBuyer, type Attempt } from "./buyerContext";
 import { BuyerRepository, buyerError, creationRejected, money, validateCart, type Checkout, type Offer, type Purchase, type Slot } from "./buyerRepository";
 import { BuyerEmptyState, BuyerIcon, BuyerStatus } from "../components/BuyerVisuals";
 import { ProductCategoryFilter } from "../../../shared/components/ProductCategoryFilter";
-import { ProductImage } from "../../../shared/components/ProductImage";
+import { AuthenticatedProductImage as ProductImage } from "../../../shared/components/AuthenticatedProductImage";
 import { authMode } from "../../../shared/api/config";
 import { DemoDataBadge } from "../components/DemoDataBadge";
 import { areSyntheticRecords, isSyntheticRecord } from "../components/demoData";
@@ -191,7 +191,7 @@ function CatalogContent() {
                 const productUnit = product.packaging_type.trim();
                 const details = `${product.packaging_quantity} ${product.packaging_quantity === 1 ? "unidade" : "unidades"}${productUnit ? ` por ${productUnit.toLocaleLowerCase("pt-BR")}` : ""}`;
                 return <article className="group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-5" key={product.id}>
-                    <ProductImage name={product.name}/>
+                    <ProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name}/>
                     <div className="mt-4 flex min-h-7 flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="max-w-[65%] truncate text-xs font-medium text-slate-500">{product.brand || "Produto"}</span>
@@ -264,7 +264,7 @@ export function ApiBuyerProductDetails() {
     </div>;
 }
 function ProductInformation({product}:{product:CatalogProduct}) {
-    return <section className={`${card} grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center`}><ProductImage name={product.name} className="h-40 w-full sm:h-44"/><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{product.brand || "Produto"}</p><h1 className="mt-2 text-2xl font-bold text-blue-950">{product.name}</h1><p className="mt-2 text-sm text-slate-600">{product.packaging_type} · {product.packaging_quantity} unidades</p><details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-blue-700">Detalhes do produto</summary><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">{Object.entries({"Conteúdo":`${product.net_content} ${product.net_content_unit}`,"GTIN":product.gtin??"Não informado","Peso bruto":`${product.gross_weight_grams} g`,"Volume":`${product.volume_cm3} cm³`,...product.variant_attributes}).map(([key,value])=><div key={key}><dt className="font-semibold">{key}</dt><dd className="text-slate-600">{String(value)}</dd></div>)}</dl></details></div></section>;
+    return <section className={`${card} grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center`}><ProductImage lazy={false} productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name} className="h-40 w-full sm:h-44"/><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{product.brand || "Produto"}</p><h1 className="mt-2 text-2xl font-bold text-blue-950">{product.name}</h1><p className="mt-2 text-sm text-slate-600">{product.packaging_type} · {product.packaging_quantity} unidades</p><details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-blue-700">Detalhes do produto</summary><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">{Object.entries({"Conteúdo":`${product.net_content} ${product.net_content_unit}`,"GTIN":product.gtin??"Não informado","Peso bruto":`${product.gross_weight_grams} g`,"Volume":`${product.volume_cm3} cm³`,...product.variant_attributes}).map(([key,value])=><div key={key}><dt className="font-semibold">{key}</dt><dd className="text-slate-600">{String(value)}</dd></div>)}</dl></details></div></section>;
 }
 function OfferCard({
     offer,

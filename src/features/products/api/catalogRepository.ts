@@ -1,15 +1,17 @@
 import { authenticatedRequest } from "../../services/apiAuth.service";
 import { ApiError } from "../../../shared/api/http";
+import type { CanonicalProductImage } from "../../../shared/api/productImageTypes";
 
-// catalog/schemas.py: ProductResponse. No price, image or inventory fields.
+// catalog/schemas.py: ProductResponse. No price or inventory fields.
 export type CatalogProduct = {
     id: string; name: string; brand: string; category: string; gtin: string | null;
     net_content: number; net_content_unit: "g" | "ml" | "un";
     packaging_type: string; packaging_quantity: number; gross_weight_grams: number;
     volume_cm3: number; variant_attributes: Record<string, string>;
     publication_state: string; version: number; demo_run_id: string; is_synthetic: true;
+    images?: CanonicalProductImage[]; primary_image?: CanonicalProductImage | null;
 };
-export type ProductCreate = Omit<CatalogProduct, "id" | "publication_state" | "version" | "demo_run_id" | "is_synthetic">;
+export type ProductCreate = Omit<CatalogProduct, "id" | "publication_state" | "version" | "demo_run_id" | "is_synthetic" | "images" | "primary_image">;
 export type CatalogPage = { items: CatalogProduct[]; total: number; page: number; page_size: number; is_synthetic: true; label: string };
 export type CatalogOverview = { total: number; products: CatalogProduct[] };
 type Transport = <T>(path: string, options?: RequestInit, replayUnauthorized?: boolean) => Promise<T>;

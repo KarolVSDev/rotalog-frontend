@@ -105,6 +105,11 @@ async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
             state.products = state.products.map(item => item.id === response.id ? response : item);
             return route.fulfill({ json: response });
         }
+        if (path.startsWith("/api/v1/products/") && path.endsWith("/images") && request.method() === "GET") {
+            const id = path.split("/").at(-2);
+            const found = state.products.find(item => item.id === id);
+            return route.fulfill({ json: { product_id: id, product_version: found?.version ?? 1, images: [], primary_image_id: null, is_synthetic: true } });
+        }
         if (path.startsWith("/api/v1/products/") && request.method() === "GET") {
             const id = path.split("/").at(-1);
             const found = state.products.find(item => item.id === id && item.publication_state === "PUBLISHED");
@@ -285,8 +290,7 @@ test("valida formulário e cria produto canônico como rascunho", async ({ page 
     await expect(page.getByRole("button", { name: /importar|excel|planilha/i })).toHaveCount(0);
     await page.getByRole("button", { name: "Iniciar cadastro individual" }).click();
     await expect(page.locator("#admin-product-form")).toBeVisible();
-    await expect(page.getByRole("img", { name: "Imagem de novo produto não disponível" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /upload|adicionar imagem/i })).toHaveCount(0);
+    await expect(page.getByLabel("Selecionar imagens", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Características adicionais do produto" })).toBeVisible();
     await expect(page.getByLabel("Característica", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Cadastrar como rascunho" }).click();

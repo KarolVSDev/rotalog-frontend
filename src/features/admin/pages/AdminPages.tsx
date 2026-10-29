@@ -19,7 +19,10 @@ import {
 } from "../../products/api/catalogRepository";
 import { ApiCatalogDetails } from "../../products/api/ApiCatalogDetails";
 import { ProductCategoryFilter } from "../../../shared/components/ProductCategoryFilter";
-import { ProductImage } from "../../../shared/components/ProductImage";
+import { CanonicalImageSelection } from "../../products/components/CanonicalImageSelection";
+import { AdminProductGallery } from "../../products/components/AdminProductGallery";
+import { ProductImagesRepository, imageOperationError, type ImageJob, type ProductGallery } from "../../products/api/productImagesRepository";
+import { AuthenticatedProductImage } from "../../../shared/components/AuthenticatedProductImage";
 import type { AdminWorkflow } from "../layout/AdminLayout";
 
 const primaryButton = "inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700";
@@ -179,7 +182,7 @@ export function AdminCatalog() {
             {result && !!visibleProducts.length && <div role="region" aria-label="Lista de produtos publicados" className="grid gap-4 md:grid-cols-2">
                 {visibleProducts.map(product => <article key={product.id} aria-label={product.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:border-blue-200 hover:shadow-sm">
                     <div className="flex gap-4 p-4 sm:p-5">
-                        <ProductImage name={product.name} className="h-24 w-24"/>
+                        <AuthenticatedProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name} className="h-24 w-24"/>
                         <div className="min-w-0 flex-1">
                             <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">{productCategory(product.category)}</span>
                             <h3 className="mt-2 break-words font-bold text-slate-900">{product.name}</h3>
@@ -196,7 +199,7 @@ export function AdminCatalog() {
             </div>}
             {result && <nav aria-label="Paginação de produtos" className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm"><p aria-live="polite">Página {result.page} de {Math.max(1, Math.ceil(result.total / result.page_size))} · {result.total} produto(s)</p><div className="flex gap-2"><button type="button" className={secondaryButton} disabled={result.page <= 1} onClick={() => changeQuery(result.page - 1, query.search)}>Anterior</button><button type="button" className={secondaryButton} disabled={result.page * result.page_size >= result.total} onClick={() => changeQuery(result.page + 1, query.search)}>Próxima</button></div></nav>}
         </section>
-        {selected && <ApiCatalogDetails key={selected} id={selected} repository={repository} onClose={() => setSelected(null)}/>}
+        {selected && <ApiCatalogDetails key={`${user?.id}:${user?.organization_id}:${selected}`} id={selected} repository={repository} onClose={() => setSelected(null)} onChanged={() => setAttempt(value => value + 1)}/>}
     </div>;
 }
 
@@ -256,6 +259,11 @@ function productInput(formData: FormData, attributeFields: VariantAttributeField
 
 export function AdminProductCreate() {
     const { user } = useAuth();
+    return <SessionAdminProductCreate key={`${user?.id}:${user?.organization_id}`}/>;
+}
+
+function SessionAdminProductCreate() {
+    const { user } = useAuth();
     const workflow = useOutletContext<AdminWorkflow>();
     const repository = useMemo(() => new CatalogRepository(user?.organization_id ?? ""), [user?.organization_id]);
     const [formOpen, setFormOpen] = useState(false);
@@ -264,9 +272,18 @@ export function AdminProductCreate() {
     const [error, setError] = useState("");
     const [verificationError, setVerificationError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [imageJobs, setImageJobs] = useState<ImageJob[]>([]);
+    const [imageChecking, setImageChecking] = useState(false);
+    const [imageBusy, setImageBusy] = useState(false);
+    const [imageMessage, setImageMessage] = useState("");
+    const [imageSnapshot, setImageSnapshot] = useState<ProductGallery | null>(null);
+    const imageRepository = useMemo(() => new ProductImagesRepository(user?.organization_id ?? ""), [user?.organization_id]);
+    const imageController = useRef<AbortController | null>(null);
+    useEffect(() => () => imageController.current?.abort(), []);
 
     async function create(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (imageChecking || submitting) return;
         setError("");
         let payload: ProductCreate;
         try { payload = productInput(new FormData(event.currentTarget), attributeFields); }
@@ -278,6 +295,19 @@ export function AdminProductCreate() {
             workflow.setCreationUncertain(false);
             workflow.setPublicationStatus("not-started");
             workflow.setPublishedProduct(null);
+            if (imageJobs.length) {
+                const controller = new AbortController(); imageController.current = controller;
+                try {
+                    for (const job of imageJobs) {
+                        const gallery = await imageRepository.resume(product.id, job, controller.signal, setImageMessage);
+                        setImageSnapshot(gallery);
+                        workflow.setCreatedProduct({ ...product, version: gallery.product_version, images: gallery.images, primary_image: gallery.images.find(image => image.is_primary) ?? null });
+                    }
+                    setImageMessage("Produto salvo e imagens associadas.");
+                } catch (failure) {
+                    if (!controller.signal.aborted) setImageMessage(`Produto salvo. O envio das imagens não foi concluído: ${imageOperationError(failure)} Use a galeria abaixo para retomar, sem recriar o produto.`);
+                }
+            }
         } catch (failure) {
             const uncertain = !(failure instanceof Error && "status" in failure && typeof failure.status === "number" && failure.status < 500);
             workflow.setCreationUncertain(uncertain);
@@ -329,12 +359,18 @@ export function AdminProductCreate() {
             {error && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
             {verificationError && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{verificationError}</p>}
             <div className="mt-5 flex flex-wrap gap-3">
-                {workflow.publicationStatus === "not-started" && <button type="button" className={primaryButton} onClick={() => void publish()}>Publicar produto</button>}
+                {workflow.publicationStatus === "not-started" && <button type="button" className={primaryButton} disabled={submitting || imageBusy} onClick={() => void publish()}>Publicar produto</button>}
                 {(workflow.publicationStatus === "uncertain" || workflow.publicationStatus === "rejected") && <button type="button" className={secondaryButton} onClick={() => void verifyPublication()}>Consultar se foi publicado</button>}
                 {workflow.publicationStatus === "published" && <Link className={primaryButton} to="/admin/products">Consultar catálogo publicado</Link>}
-                {canStartAnother && <button type="button" className={secondaryButton} onClick={() => { workflow.setCreatedProduct(null); workflow.setCreationUncertain(false); workflow.setPublicationStatus("not-started"); workflow.setPublishedProduct(null); }}>Cadastrar outro produto</button>}
+                {canStartAnother && <button type="button" className={secondaryButton} disabled={submitting || imageBusy} onClick={() => { setImageJobs([]); setImageSnapshot(null); setImageMessage(""); workflow.setCreatedProduct(null); workflow.setCreationUncertain(false); workflow.setPublicationStatus("not-started"); workflow.setPublishedProduct(null); }}>Cadastrar outro produto</button>}
             </div>
             {(workflow.publicationStatus === "uncertain" || workflow.publicationStatus === "rejected") && <p className="mt-3 text-xs leading-5 text-slate-500">A consulta acima é somente leitura. Não haverá repetição automática da publicação; rascunhos não podem ser recuperados pela API atual.</p>}
+            {imageMessage && <p role="status" className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-950">{imageMessage}</p>}
+            <AdminProductGallery key={product.id} productId={product.id} initialJobs={imageJobs} snapshot={imageSnapshot} disabled={submitting || !["not-started", "published"].includes(workflow.publicationStatus)} onBusy={setImageBusy} onGallery={gallery => {
+                setImageSnapshot(gallery);
+                if (imageJobs.length && imageJobs.every(job => job.attached)) setImageMessage("Produto salvo e imagens associadas.");
+                workflow.setCreatedProduct(previous => previous?.id === product.id ? { ...previous, version: gallery.product_version, images: gallery.images, primary_image: gallery.images.find(image => image.is_primary) ?? null } : previous);
+            }}/>
         </section>}
         {!product && !workflow.creationUncertain && <section className={`${cardClass} flex flex-wrap items-center justify-between gap-4`} aria-label="Opção de cadastro individual">
             <div><h2 className="font-bold text-slate-900">Cadastro individual</h2><p className="mt-1 text-sm text-slate-600">Informe os dados de identificação e embalagem para criar um rascunho.</p></div>
@@ -428,11 +464,7 @@ export function AdminProductCreate() {
                     </section>
                 </div>
                 <aside className="space-y-3">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                        <h2 className="font-bold text-slate-900">Imagem do produto</h2>
-                        <ProductImage name="novo produto" className="mt-3 h-44 w-full"/>
-                        <p className="mt-3 text-sm leading-5 text-slate-600">A inclusão de imagens estará disponível em uma próxima etapa.</p>
-                    </div>
+                    <CanonicalImageSelection jobs={imageJobs} onChange={setImageJobs} disabled={submitting} onChecking={setImageChecking}/>
                     <div className="rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-950">
                         <h2 className="font-bold">Cadastro canônico</h2>
                         <p className="mt-1">O cadastro cria um rascunho. Preços, estoque, depósitos e ofertas são gerenciados pelo fornecedor.</p>
@@ -443,7 +475,7 @@ export function AdminProductCreate() {
             {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-5">
                 <p className="max-w-xl text-sm leading-5 text-slate-500">Revise os dados antes de salvar. A publicação será solicitada separadamente.</p>
-                <button type="submit" className={primaryButton} disabled={submitting}>{submitting ? "Cadastrando…" : "Cadastrar como rascunho"}</button>
+                <button type="submit" className={primaryButton} disabled={submitting || imageChecking}>{submitting ? "Cadastrando…" : "Cadastrar como rascunho"}</button>
             </div>
         </form>}
     </div>;
