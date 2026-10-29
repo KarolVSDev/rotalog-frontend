@@ -14,6 +14,8 @@ div[data-supplier-ui] { background: #f7f9fc; }
 [data-supplier-ui] :is(.rounded-xl, .rounded-2xl) { border-radius: 14px; }
 [data-supplier-ui] h1 { color: #172554; letter-spacing: -.035em; font-weight: 750; }
 [data-supplier-ui] h2 { color: #172554; letter-spacing: -.02em; }
+/* Preserve contrast against the administrative catalog banner. */
+[data-supplier-ui] h2.admin-catalog-banner-title { color: #fff; }
 [data-supplier-ui] :is(button, a, summary, input, select, textarea):focus-visible { outline: 3px solid #316bff; outline-offset: 3px; }
 [data-supplier-ui] :is(input, select, textarea) { border-color: #d7dfed; color: #172554; background-color: white; }
 [data-supplier-ui] :is(input, select, textarea):focus { border-color: #316bff; }

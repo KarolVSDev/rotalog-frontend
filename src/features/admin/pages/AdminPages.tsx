@@ -73,7 +73,7 @@ export function AdminOverview() {
         <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#102957] via-blue-900 to-blue-700 p-6 text-white shadow-sm sm:p-8">
             <div className="max-w-3xl">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-200">Área administrativa</p>
-                <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Catálogo canônico</h2>
+                <h2 className="admin-catalog-banner-title mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Catálogo canônico</h2>
                 <p className="mt-3 text-sm leading-6 text-blue-100 sm:text-base">Cadastre informações de identificação e embalagem. Preços, ofertas e estoque são gerenciados pelos fornecedores.</p>
                 <div className="mt-6 flex flex-wrap gap-3">
                     <Link className="inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-900 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" to="/admin/products">Ver produtos publicados</Link>
@@ -453,13 +453,53 @@ export function AdminAccount() {
     const { user } = useAuth();
     const [passwordDialog, setPasswordDialog] = useState(false);
     const organization = user?.organizations?.find(item => item.id === user.organization_id);
-    return <div className="space-y-5">
-        <PageHeader title="Minha conta" subtitle="Informações da conta administrativa e da sessão."/>
-        <section className={`${cardClass} max-w-3xl`} aria-label="Dados da conta administrativa">
-            <div><h2 className="text-lg font-bold">{user?.name ?? "Administrador"}</h2><span className="mt-2 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">Administrador RotaLog</span></div>
-            <dl className="mt-6 grid gap-4 sm:grid-cols-2">{[["Nome", user?.name], ["E-mail", user?.email], ["Organização", organization?.name], ["Perfil", user?.role]].map(([label, value]) => <div key={label} className="border-t border-slate-100 pt-3"><dt className="text-sm text-slate-500">{label}</dt><dd className="mt-1 break-words font-medium">{value || "Não informado"}</dd></div>)}</dl>
-            <p className="mt-6 text-sm text-slate-500">Nome, e-mail e organização são somente leitura.</p>
-            {authMode === "api" && <button type="button" onClick={() => setPasswordDialog(true)} className={`${secondaryButton} mt-4`}>Alterar senha</button>}
+    const initials = user?.name.trim().split(/\s+/).filter(Boolean).map(part => part[0]).filter((_, index, parts) => index === 0 || index === parts.length - 1).join("").toLocaleUpperCase("pt-BR");
+    const profile = user?.role === "ROTALOG_ADMIN" ? "Administrador RotaLog" : user?.role || "Não informado";
+
+    return <div className="mx-auto max-w-5xl space-y-6">
+        <PageHeader title="Minha conta" subtitle="Consulte seus dados pessoais, sua organização e as opções de segurança da conta."/>
+        <section className={`${cardClass} overflow-hidden border-t-4 border-t-blue-700`} aria-label="Identificação da conta">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                <span aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-2xl font-bold text-blue-800 ring-1 ring-inset ring-blue-100">{initials || "—"}</span>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Conta administrativa</p>
+                    <h2 className="mt-1 break-words text-xl font-bold text-slate-900 sm:text-2xl">{user?.name || "Não informado"}</h2>
+                    <p className="mt-1 break-words text-sm text-slate-600">{user?.email || "Não informado"}</p>
+                    <span className="mt-3 inline-flex max-w-full rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{profile}</span>
+                </div>
+            </div>
+        </section>
+        <div className="grid gap-6 md:grid-cols-2">
+            <section className={`${cardClass} min-w-0`} aria-labelledby="admin-personal-title">
+                <h2 id="admin-personal-title" className="text-lg font-bold text-slate-900">Dados pessoais</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">Informações de identificação da sua conta.</p>
+                <dl className="mt-5 space-y-4">
+                    {[["Nome", user?.name], ["E-mail", user?.email]].map(([label, value]) => <div key={label} className="border-t border-slate-100 pt-4">
+                        <dt className="text-sm text-slate-600">{label}</dt>
+                        <dd className="mt-1 break-words text-sm font-semibold text-slate-900">{value || "Não informado"}</dd>
+                    </div>)}
+                </dl>
+            </section>
+            <section className={`${cardClass} min-w-0`} aria-labelledby="admin-access-title">
+                <h2 id="admin-access-title" className="text-lg font-bold text-slate-900">Organização e acesso</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">Vínculo e perfil associados à sessão atual.</p>
+                <dl className="mt-5 space-y-4">
+                    {[["Organização", organization?.name], ["Perfil", profile]].map(([label, value]) => <div key={label} className="border-t border-slate-100 pt-4">
+                        <dt className="text-sm text-slate-600">{label}</dt>
+                        <dd className="mt-1 break-words text-sm font-semibold text-slate-900">{value || "Não informado"}</dd>
+                    </div>)}
+                </dl>
+            </section>
+        </div>
+        <p className="text-sm leading-6 text-slate-600">Nome, e-mail e organização são somente leitura.</p>
+        <section className={cardClass} aria-labelledby="admin-security-title">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="max-w-xl">
+                    <h2 id="admin-security-title" className="text-lg font-bold text-slate-900">Segurança</h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">Proteja o acesso à sua conta. Ao alterar a senha, todas as sessões serão encerradas e será necessário entrar novamente.</p>
+                </div>
+                {authMode === "api" && <button type="button" onClick={() => setPasswordDialog(true)} className={`${secondaryButton} shrink-0`}>Alterar senha</button>}
+            </div>
         </section>
         {passwordDialog && <PasswordChangeDialog onClose={() => setPasswordDialog(false)}/>}
     </div>;
