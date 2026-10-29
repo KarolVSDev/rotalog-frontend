@@ -77,6 +77,32 @@ export function canAccessRoute(
 // API policy is separate from the legacy mock navigation above.
 export type OperationalRoute = { path: string; label: string };
 const planningPath = "/fornecedor/planejamento";
+
+export type AdminRoute = OperationalRoute & { capability: "catalog:read" | "product:write" };
+const administrativeRoutes: AdminRoute[] = [
+    { path: "/admin", label: "Visão geral", capability: "catalog:read" },
+    { path: "/admin/products", label: "Produtos publicados", capability: "catalog:read" },
+    { path: "/admin/products/new", label: "Cadastrar produto", capability: "product:write" },
+];
+
+export function getAdminRouteCapability(pathname: string): AdminRoute["capability"] | undefined {
+    if (pathname === "/admin/account") return "catalog:read";
+    return administrativeRoutes.find(route => route.path === pathname)?.capability;
+}
+
+export function adminRoutes(user: AuthUser): OperationalRoute[] {
+    if (!adminAuthorized(user, "catalog:read")) return [];
+    return administrativeRoutes
+        .filter(route => route.capability === "catalog:read" || adminAuthorized(user, route.capability))
+        .map(({ path, label }) => ({ path, label }));
+}
+
+export function canAccessAdminRoute(user: AuthUser, pathname: string): boolean {
+    const capability = getAdminRouteCapability(pathname);
+    return capability !== undefined && adminAuthorized(user, "catalog:read") &&
+        (capability === "catalog:read" || adminAuthorized(user, capability));
+}
+
 export function operationalRoutes(user: AuthUser): OperationalRoute[] {
     if (plannerAuthorized(user)) return [{ path: planningPath, label: "Planejamento" }];
     const permissions = supplierPermissions(user);
@@ -99,8 +125,7 @@ export function loginDestination(user: AuthUser, requested: unknown, apiMode: bo
         return (apiMode ? canAccessOperationalRoute(user, requested) : appRoutes.some(route => route.path === requested) || requested === "/fornecedor/conta") ? requested : fallback;
     }
     if (user.role === "ROTALOG_ADMIN") {
-        const capability = requested === "/admin/products/new" ? "product:write" : "catalog:read";
-        return ["/admin", "/admin/products", "/admin/products/new", "/admin/account"].includes(requested) && adminAuthorized(user, capability) ? requested : fallback;
+        return canAccessAdminRoute(user, requested) ? requested : fallback;
     }
     if (user.role === "BUYER_ADMIN") {
         const capability = requested === "/comprador/carrinho" ? "checkout:create" : /^\/comprador\/compras(?:\/[^/]+)?$/.test(requested) ? "purchase:read" : "catalog:read";

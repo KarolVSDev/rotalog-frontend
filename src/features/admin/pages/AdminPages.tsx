@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { adminAuthorized } from "../../services/apiAuth.service";
 import { PasswordChangeDialog } from "../../account/components/PasswordChangeDialog";
 import { authMode } from "../../../shared/api/config";
 import { PageHeader } from "../../../shared/components/PageHeader";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
     CatalogRepository,
     catalogCategories,
@@ -11,6 +13,7 @@ import {
     catalogMutationError,
     productCategory,
     publicationLabel,
+    type CatalogOverview,
     type CatalogPage,
     type ProductCreate,
 } from "../../products/api/catalogRepository";
@@ -26,28 +29,102 @@ const cardClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm
 
 export function AdminOverview() {
     const { user } = useAuth();
+    const canWriteProducts = !!user && adminAuthorized(user, "product:write");
+    const repository = useMemo(() => new CatalogRepository(user?.organization_id ?? ""), [user?.organization_id]);
+    const [attempt, setAttempt] = useState(0);
+    const [snapshotState, setSnapshotState] = useState<{ key: string; data: CatalogOverview } | null>(null);
+    const [errorState, setErrorState] = useState<{ key: string; message: string } | null>(null);
+    const requestKey = `${user?.organization_id ?? ""}:${attempt}`;
+    const snapshot = snapshotState?.key === requestKey ? snapshotState.data : null;
+    const error = errorState?.key === requestKey ? errorState.message : "";
+
+    useEffect(() => {
+        let active = true;
+        void repository.listAllPublished()
+            .then(data => { if (active) setSnapshotState({ key: requestKey, data }); })
+            .catch(failure => { if (active) setErrorState({ key: requestKey, message: catalogError(failure) }); });
+        return () => { active = false; };
+    }, [repository, requestKey]);
+
+    const brandData = useMemo(() => {
+        if (!snapshot) return [];
+        const counts = new Map<string, number>();
+        for (const product of snapshot.products) {
+            counts.set(product.brand, (counts.get(product.brand) ?? 0) + 1);
+        }
+        const sorted = [...counts].sort(([leftName, leftCount], [rightName, rightCount]) =>
+            rightCount - leftCount || leftName.localeCompare(rightName, "pt-BR"),
+        );
+        const colors = ["#1d4ed8", "#059669", "#7c3aed", "#ea580c", "#0891b2", "#64748b"];
+        const topBrands = sorted.slice(0, 5).map(([name, count], index) => ({
+            name, count, color: colors[index],
+        }));
+        const otherCount = sorted.slice(5).reduce((total, [, count]) => total + count, 0);
+        return otherCount > 0
+            ? [...topBrands, { name: "Outras marcas", count: otherCount, color: colors[5] }]
+            : topBrands;
+    }, [snapshot]);
+
+    const brandCount = snapshot ? new Set(snapshot.products.map(product => product.brand)).size : 0;
+    const identifiedCount = snapshot ? snapshot.products.filter(product => product.gtin !== null).length : 0;
+
     return <div className="space-y-6">
         <PageHeader title={`Olá, ${user?.name ?? "administrador"}`} subtitle="Gerencie a identificação dos produtos do catálogo RotaLog."/>
         <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#102957] via-blue-900 to-blue-700 p-6 text-white shadow-sm sm:p-8">
             <div className="max-w-3xl">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-200">Área administrativa</p>
-                <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Catálogo canônico</h2>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Catálogo canônico</h2>
                 <p className="mt-3 text-sm leading-6 text-blue-100 sm:text-base">Cadastre informações de identificação e embalagem. Preços, ofertas e estoque são gerenciados pelos fornecedores.</p>
                 <div className="mt-6 flex flex-wrap gap-3">
                     <Link className="inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-900 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" to="/admin/products">Ver produtos publicados</Link>
-                    <Link className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/40 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" to="/admin/products/new">Cadastrar produto</Link>
+                    {canWriteProducts && <Link className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/40 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" to="/admin/products/new">Cadastrar produto</Link>}
                 </div>
             </div>
         </section>
+        <section className="space-y-4" aria-label="Indicadores do catálogo">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+                <div><h2 className="text-lg font-bold text-slate-900">Visão geral do catálogo</h2><p className="mt-1 text-sm text-slate-600">Indicadores de produtos publicados, carregados em todas as páginas da API.</p></div>
+                {snapshot && <p className="text-xs text-slate-500">Total informado pela API: {snapshot.total}</p>}
+            </div>
+            {!snapshot && !error && <p role="status" aria-live="polite" className="text-sm text-slate-600">Carregando indicadores do catálogo…</p>}
+            {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>Não foi possível carregar os indicadores do catálogo: {error}</p><button type="button" className="mt-2 font-semibold underline" onClick={() => setAttempt(value => value + 1)}>Tentar novamente</button></div>}
+            {snapshot && <>
+                <div className="grid gap-4 sm:grid-cols-3">
+                    <article className={cardClass}><p className="text-sm font-medium text-slate-600">Produtos publicados</p><p className="mt-2 text-3xl font-bold text-slate-900">{snapshot.total}</p><p className="mt-1 text-xs text-slate-500">Totalizador global da API</p></article>
+                    <article className={cardClass}><p className="text-sm font-medium text-slate-600">Marcas no catálogo</p><p className="mt-2 text-3xl font-bold text-slate-900">{brandCount}</p><p className="mt-1 text-xs text-slate-500">Calculado sobre o catálogo completo</p></article>
+                    <article className={cardClass}><p className="text-sm font-medium text-slate-600">Produtos com GTIN</p><p className="mt-2 text-3xl font-bold text-slate-900">{identifiedCount}</p><p className="mt-1 text-xs text-slate-500">De {snapshot.total} produtos publicados</p></article>
+                </div>
+                <section className={`${cardClass} min-w-0`} aria-labelledby="admin-brand-chart-title">
+                    <h3 id="admin-brand-chart-title" className="font-bold text-slate-900">Produtos publicados por marca</h3>
+                    <p className="mt-1 text-sm text-slate-600">Distribuição do catálogo completo; marcas além das cinco primeiras são agrupadas.</p>
+                    {brandData.length === 0
+                        ? <p className="flex h-56 items-center justify-center text-sm text-slate-600">Não há produtos publicados para exibir.</p>
+                        : <div className="mt-3 h-64 min-w-0" role="group" aria-label="Gráfico de produtos publicados por marca">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                <BarChart data={brandData} layout="vertical" margin={{ right: 24 }} accessibilityLayer>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0"/>
+                                    <XAxis type="number" allowDecimals={false} tick={{ fill: "#475569", fontSize: 12 }}/>
+                                    <YAxis type="category" dataKey="name" width={132} tick={{ fill: "#475569", fontSize: 12 }} tickLine={false} axisLine={false}/>
+                                    <Tooltip/>
+                                    <Bar dataKey="count" name="Produtos publicados" radius={[0, 4, 4, 0]} maxBarSize={24} isAnimationActive={false}>
+                                        {brandData.map(item => <Cell key={item.name} fill={item.color}/>)}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>}
+                </section>
+            </>}
+        </section>
         <div className="grid gap-4 md:grid-cols-2">
             <article className={`${cardClass} transition hover:border-blue-200 hover:shadow-md`}><span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg font-bold text-blue-800" aria-hidden="true">01</span><h3 className="mt-4 font-semibold text-slate-900">Consultar produtos</h3><p className="mt-2 text-sm leading-6 text-slate-600">Pesquise o catálogo publicado e consulte os dados de cada produto.</p><Link className="mt-4 inline-flex text-sm font-semibold text-blue-800 hover:underline" to="/admin/products">Abrir catálogo<span aria-hidden="true" className="ml-1">→</span></Link></article>
-            <article className={`${cardClass} transition hover:border-blue-200 hover:shadow-md`}><span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-lg font-bold text-emerald-800" aria-hidden="true">02</span><h3 className="mt-4 font-semibold text-slate-900">Cadastrar produto</h3><p className="mt-2 text-sm leading-6 text-slate-600">Crie um rascunho e publique-o em uma etapa separada, após a revisão.</p><Link className="mt-4 inline-flex text-sm font-semibold text-blue-800 hover:underline" to="/admin/products/new">Iniciar cadastro<span aria-hidden="true" className="ml-1">→</span></Link></article>
+            {canWriteProducts && <article className={`${cardClass} transition hover:border-blue-200 hover:shadow-md`}><span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-lg font-bold text-emerald-800" aria-hidden="true">02</span><h3 className="mt-4 font-semibold text-slate-900">Cadastrar produto</h3><p className="mt-2 text-sm leading-6 text-slate-600">Crie um rascunho e publique-o em uma etapa separada, após a revisão.</p><Link className="mt-4 inline-flex text-sm font-semibold text-blue-800 hover:underline" to="/admin/products/new">Iniciar cadastro<span aria-hidden="true" className="ml-1">→</span></Link></article>}
         </div>
     </div>;
 }
 
 export function AdminCatalog() {
     const { user } = useAuth();
+    const canWriteProducts = !!user && adminAuthorized(user, "product:write");
     const repository = useMemo(() => new CatalogRepository(user?.organization_id ?? ""), [user?.organization_id]);
     const [search, setSearch] = useState("");
     const [query, setQuery] = useState({ page: 1, search: "" });
@@ -83,7 +160,7 @@ export function AdminCatalog() {
     const visibleProducts = result?.items.filter(product => !category || product.category === category) ?? [];
 
     return <div className="space-y-5">
-        <PageHeader title="Produtos publicados" subtitle="Consulte e organize os produtos disponíveis no catálogo canônico." actions={<Link className={primaryButton} to="/admin/products/new">Cadastrar produto</Link>}/>
+        <PageHeader title="Produtos publicados" subtitle="Consulte e organize os produtos disponíveis no catálogo canônico." actions={canWriteProducts ? <Link className={primaryButton} to="/admin/products/new">Cadastrar produto</Link> : undefined}/>
         <section className={`${cardClass} space-y-5`} aria-label="Catálogo de produtos publicados">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div><h2 className="text-lg font-bold text-slate-900">Catálogo publicado</h2><p className="mt-1 text-sm text-slate-500">Pesquise produtos e consulte seus dados comerciais e de embalagem.</p></div>
@@ -181,6 +258,7 @@ export function AdminProductCreate() {
     const { user } = useAuth();
     const workflow = useOutletContext<AdminWorkflow>();
     const repository = useMemo(() => new CatalogRepository(user?.organization_id ?? ""), [user?.organization_id]);
+    const [formOpen, setFormOpen] = useState(false);
     const [attributeFields, setAttributeFields] = useState<VariantAttributeField[]>([]);
     const nextAttributeId = useRef(0);
     const [error, setError] = useState("");
@@ -258,7 +336,11 @@ export function AdminProductCreate() {
             </div>
             {(workflow.publicationStatus === "uncertain" || workflow.publicationStatus === "rejected") && <p className="mt-3 text-xs leading-5 text-slate-500">A consulta acima é somente leitura. Não haverá repetição automática da publicação; rascunhos não podem ser recuperados pela API atual.</p>}
         </section>}
-        {!product && !workflow.creationUncertain && <form className={`${cardClass} space-y-6`} onSubmit={event => void create(event)}>
+        {!product && !workflow.creationUncertain && <section className={`${cardClass} flex flex-wrap items-center justify-between gap-4`} aria-label="Opção de cadastro individual">
+            <div><h2 className="font-bold text-slate-900">Cadastro individual</h2><p className="mt-1 text-sm text-slate-600">Informe os dados de identificação e embalagem para criar um rascunho.</p></div>
+            <button type="button" className={primaryButton} aria-controls="admin-product-form" aria-expanded={formOpen} onClick={() => setFormOpen(open => !open)}>{formOpen ? "Recolher formulário" : "Iniciar cadastro individual"}</button>
+        </section>}
+        {!product && !workflow.creationUncertain && <form id="admin-product-form" hidden={!formOpen} className={`${cardClass} space-y-6`} onSubmit={event => void create(event)}>
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
                 <div className="space-y-5">
                     <section className="rounded-2xl border border-slate-200 p-4 sm:p-5">

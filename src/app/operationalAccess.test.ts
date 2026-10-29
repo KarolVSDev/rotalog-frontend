@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { apiAuthService, authorize, plannerAuthorized, type ApiUser } from "../features/services/apiAuth.service";
 import { request } from "../shared/api/http";
-import { canAccessOperationalRoute, defaultUserPath, loginDestination, operationalRoutes } from "./routePermissions";
+import { adminRoutes, canAccessAdminRoute, canAccessOperationalRoute, defaultUserPath, loginDestination, operationalRoutes } from "./routePermissions";
 
 vi.mock("../shared/api/config", () => ({ authMode: "api", apiUrl: "http://localhost:8000" }));
 vi.mock("../shared/api/http", async importOriginal => ({ ...await importOriginal<typeof import("../shared/api/http")>(), request: vi.fn() }));
@@ -68,6 +68,25 @@ test("buyer, administrator and mock supplier retain their destinations", () => {
     expect(loginDestination(admin, "/fornecedor/planejamento", true)).toBe("/admin");
     expect(loginDestination({ ...admin, capabilities: ["catalog:read"] }, "/admin/products/new", true)).toBe("/admin");
     expect(defaultUserPath({ ...planner, role: "SUPPLIER_OPERATOR" }, false)).toBe("/fornecedor");
+});
+test("admin navigation exposes catalog and account routes by capability", () => {
+    const admin: ApiUser = { ...planner, role: "ROTALOG_ADMIN", organizations: [{ id: "org", name: "Org", role: "ROTALOG_ADMIN" }], capabilities: ["catalog:read", "product:write", "warehouse:review"] };
+    expect(adminRoutes(admin)).toEqual([
+        { path: "/admin", label: "Visão geral" },
+        { path: "/admin/products", label: "Produtos publicados" },
+        { path: "/admin/products/new", label: "Cadastrar produto" },
+    ]);
+    expect(canAccessAdminRoute(admin, "/admin/account")).toBe(true);
+
+    const catalogOnly = { ...admin, capabilities: ["catalog:read"] };
+    expect(adminRoutes(catalogOnly)).toEqual([
+        { path: "/admin", label: "Visão geral" },
+        { path: "/admin/products", label: "Produtos publicados" },
+    ]);
+    expect(canAccessAdminRoute(catalogOnly, "/admin/products/new")).toBe(false);
+    expect(canAccessAdminRoute({ ...admin, capabilities: ["product:write"] }, "/admin")).toBe(false);
+    expect(canAccessAdminRoute({ ...admin, role: "SUPPLIER_OPERATOR", organizations: [{ id: "org", name: "Org", role: "SUPPLIER_OPERATOR" }], capabilities: ["catalog:read", "product:write"] }, "/admin")).toBe(false);
+    expect(canAccessAdminRoute(planner, "/admin")).toBe(false);
 });
 test("mock buyer login without a requested destination preserves purchases", () => {
     const buyer = { id: "mock-buyer", name: "Comprador", email: "buyer@example.invalid", role: "BUYER_ADMIN" as const };
