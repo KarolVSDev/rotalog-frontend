@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { plannerAuthorized } from "../../services/apiAuth.service";
 import { PageHeader } from "../../../shared/components/PageHeader";
 import { PlanningRepository, planningError } from "../api/planningRepository";
 import { routeStates, type RouteFilters, type RoutesPage } from "../api/planningTypes";
+import { RouteDetails } from "../components/RouteDetails";
 
 const button = "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50";
 const select = "mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
@@ -20,6 +21,8 @@ export function PlanningDashboard() {
     const repository = useMemo(() => new PlanningRepository(user?.organization_id ?? ""), [user?.organization_id]);
     const [query, setQuery] = useState<RouteFilters & { page: number }>({ page: 1, state: "", active: "" });
     const [attempt, setAttempt] = useState(0);
+    const [selected, setSelected] = useState<string | null>(null);
+    const detailsTrigger = useRef<HTMLButtonElement | null>(null);
     const [result, setResult] = useState<{ key: string; data?: RoutesPage; error?: string } | null>(null);
     const key = JSON.stringify([user?.id, user?.organization_id, query, attempt]);
     const current = result?.key === key ? result : null;
@@ -38,7 +41,7 @@ export function PlanningDashboard() {
 
     if (!authorized) return <p role="alert">Acesso não autorizado para planejamento.</p>;
     const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
-    return <div className="space-y-6">
+    return <><div hidden={selected !== null} className="space-y-6">
         <PageHeader title="Planejamento" subtitle="Consulte as rotas da operação e acompanhe sua organização para coleta e entrega." actions={<button type="button" className={button} disabled={loading} onClick={() => setAttempt(value => value + 1)}>Atualizar rotas</button>}/>
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="planning-filters-title">
             <h2 id="planning-filters-title" className="text-lg font-bold">Consulta de rotas</h2>
@@ -69,6 +72,7 @@ export function PlanningDashboard() {
                         <dl className="mt-5 grid grid-cols-1 gap-4 border-t border-slate-100 pt-4 min-[400px]:grid-cols-2">
                             {[["Data programada", scheduledDate(route.scheduled_date)], ["Veículo", route.vehicle?.registration || "Não informado"], ["Carga", route.cargo ? `${number.format(route.cargo.total_sellable_packages)} volumes vendáveis` : "Não informada"], ["Paradas", Array.isArray(route.stops) ? `${route.stops.length} (coleta e entregas)` : "Não informadas"]].map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-slate-600">{label}</dt><dd className="mt-1 break-words text-sm font-semibold">{value}</dd></div>)}
                         </dl>
+                        <button type="button" className={`${button} mt-5 w-full sm:w-auto`} onClick={event => { detailsTrigger.current = event.currentTarget; setSelected(route.id); }} aria-label={`Ver detalhes da rota ${route.code || route.id}`}>Ver detalhes</button>
                     </li>)}
                 </ul>
                 <nav aria-label="Paginação de rotas" className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
@@ -76,5 +80,5 @@ export function PlanningDashboard() {
                 </nav>
             </>}
         </section>
-    </div>;
+    </div>{selected && <RouteDetails key={`${user?.id}:${user?.organization_id}:${selected}`} id={selected} repository={repository} onClose={() => { setSelected(null); requestAnimationFrame(() => detailsTrigger.current?.focus()); }}/>}</>;
 }

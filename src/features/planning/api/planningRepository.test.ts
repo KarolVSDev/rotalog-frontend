@@ -1,7 +1,29 @@
 import { expect, test, vi } from "vitest";
-import { PlanningRepository, planningError } from "./planningRepository";
+import { PlanningRepository, planningError, routeDetailError } from "./planningRepository";
 import { ApiError } from "../../../shared/api/http";
 import type { RoutesPage } from "./planningTypes";
+import { routeFixture, manifestFixture } from "../../../../tests/fixtures/planning";
+
+test("detail and manifest use canonical GET endpoints and preserve organization and cancellation", async () => {
+    const transport = vi.fn().mockResolvedValueOnce(routeFixture).mockResolvedValueOnce(manifestFixture);
+    const repository = new PlanningRepository("org", transport);
+    const signal = new AbortController().signal;
+    expect(await repository.detail("test-route", signal)).toBe(routeFixture);
+    expect(await repository.manifest("test-route", signal)).toBe(manifestFixture);
+    expect(transport.mock.calls.map(call => call[0])).toEqual(["/api/v1/routes/test-route", "/api/v1/routes/test-route/manifest"]);
+    for (const call of transport.mock.calls) expect(call[1]).toEqual({ headers: { "X-Organization-Id": "org" }, signal });
+});
+test("refuses mismatched resources and missing context", async () => {
+    const transport = vi.fn().mockResolvedValueOnce({ ...routeFixture, id: "other" }).mockResolvedValueOnce({ ...manifestFixture, route_id: "other" });
+    const repository = new PlanningRepository("org", transport);
+    await expect(repository.detail("test-route")).rejects.toThrow("Resposta inválida");
+    await expect(repository.manifest("test-route")).rejects.toThrow("Resposta inválida");
+    await expect(new PlanningRepository("", transport).detail("test-route")).rejects.toThrow("Organização");
+    expect(routeDetailError(new ApiError(404))).toContain("Rota não encontrada");
+    expect(routeDetailError(new ApiError(404), true)).toContain("Manifesto não encontrado");
+    expect(routeDetailError(new ApiError(403), true)).toContain("Sem autorização");
+    expect(routeDetailError(new ApiError(401))).toContain("Sessão expirada");
+});
 
 const page: RoutesPage = { items: [], total: 0, page: 1, page_size: 25, is_synthetic: true, label: "SIMULAÇÃO" };
 test("requests only canonical GET routes with actual pagination, filters and organization", async () => {

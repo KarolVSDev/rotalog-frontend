@@ -45,3 +45,9 @@ export type CanonicalRoute = {
 export type RoutesPage = {
     items: CanonicalRoute[]; total: number; page: number; page_size: number; is_synthetic: true; label: string;
 };
+export type CargoIssue = {
+    id: string; fulfillment_line_id: string; expected_quantity: number; observed_quantity: number;
+    category: string; reason: string; state: "OPEN" | "RESOLVED"; correction: string | null;
+    reported_by: string; resolved_by: string | null; created_at: string; resolved_at: string | null; photo_ids: string[];
+};
+export type CargoManifest = CargoSummary & { lines: ManifestLine[]; issues: CargoIssue[] };

@@ -1,6 +1,6 @@
 import { authenticatedRequest } from "../../services/apiAuth.service";
 import { ApiError } from "../../../shared/api/http";
-import type { RouteFilters, RoutesPage } from "./planningTypes";
+import type { CanonicalRoute, CargoManifest, RouteFilters, RoutesPage } from "./planningTypes";
 
 type Transport = typeof authenticatedRequest;
 export class PlanningRepository {
@@ -9,6 +9,20 @@ export class PlanningRepository {
     constructor(organizationId: string, transport: Transport = authenticatedRequest) {
         this.organizationId = organizationId;
         this.transport = transport;
+    }
+    private options(signal?: AbortSignal): RequestInit {
+        if (!this.organizationId) throw new Error("Organização não disponível. Entre novamente.");
+        return { headers: { "X-Organization-Id": this.organizationId }, signal };
+    }
+    async detail(id: string, signal?: AbortSignal): Promise<CanonicalRoute> {
+        const result = await this.transport<CanonicalRoute>(`/api/v1/routes/${encodeURIComponent(id)}`, this.options(signal));
+        if (result.id !== id || !Array.isArray(result.stops)) throw new Error("Resposta inválida para a rota solicitada.");
+        return result;
+    }
+    async manifest(id: string, signal?: AbortSignal): Promise<CargoManifest> {
+        const result = await this.transport<CargoManifest>(`/api/v1/routes/${encodeURIComponent(id)}/manifest`, this.options(signal));
+        if (result.route_id !== id || !Array.isArray(result.lines) || !Array.isArray(result.issues)) throw new Error("Resposta inválida para o manifesto solicitado.");
+        return result;
     }
     async list(page: number, filters: RouteFilters, signal?: AbortSignal): Promise<RoutesPage> {
         if (!this.organizationId) throw new Error("Organização não disponível. Entre novamente.");
@@ -24,6 +38,15 @@ export class PlanningRepository {
         }
         return result;
     }
+}
+export function routeDetailError(error: unknown, manifest = false): string {
+    const resource = manifest ? "Manifesto" : "Rota";
+    if (error instanceof ApiError) {
+        if (error.status === 404) return `${resource} não ${manifest ? "encontrado" : "encontrada"} ou indisponível para esta sessão.`;
+        if (error.status === 403) return `Sem autorização para consultar ${manifest ? "o manifesto" : "esta rota"}.`;
+        if (error.status === 401) return "Sessão expirada. Entre novamente.";
+    }
+    return manifest ? `Manifesto indisponível. ${planningError(error)}` : planningError(error);
 }
 export function planningError(error: unknown): string {
     if (error instanceof ApiError) {
