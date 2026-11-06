@@ -31,6 +31,10 @@ const secondaryButton = "inline-flex min-h-10 items-center justify-center rounde
 const fieldClass = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100";
 const cardClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6";
 
+function RequiredMark() {
+    return <span aria-hidden="true" className="ml-1 text-rose-700">*</span>;
+}
+
 export function AdminOverview() {
     const { user } = useAuth();
     const canWriteProducts = !!user && adminAuthorized(user, "product:write");
@@ -383,45 +387,50 @@ function SessionAdminProductCreate() {
             <div><h2 className="font-bold text-slate-900">Cadastro individual</h2><p className="mt-1 text-sm text-slate-600">Informe os dados de identificação e embalagem para criar um rascunho.</p></div>
             <button type="button" className={primaryButton} aria-controls="admin-product-form" aria-expanded={formOpen} onClick={() => setFormOpen(open => !open)}>{formOpen ? "Recolher formulário" : "Iniciar cadastro individual"}</button>
         </section>}
-        {!product && !workflow.creationUncertain && <form id="admin-product-form" hidden={!formOpen} className={`${cardClass} space-y-6`} onSubmit={event => void create(event)}>
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        {!product && !workflow.creationUncertain && <form id="admin-product-form" hidden={!formOpen} className={`${cardClass} space-y-5`} onSubmit={event => void create(event)}>
+            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-4">
+                <div>
+                    <h2 className="text-lg font-bold text-slate-900">Dados do produto</h2>
+                    <p className="mt-1 text-sm text-slate-600"><RequiredMark/> Campo obrigatório</p>
+                </div>
+                <p className="text-xs text-slate-500">O produto será salvo como rascunho.</p>
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.8fr)] xl:grid-cols-[minmax(0,1.7fr)_minmax(20rem,0.8fr)]">
                 <div className="space-y-5">
-                    <section className="rounded-2xl border border-slate-200 p-4 sm:p-5">
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                         <h2 className="font-bold text-slate-900">Identificação do produto</h2>
-                        <p className="mt-1 text-sm text-slate-500">Dados principais para reconhecer o produto no catálogo.</p>
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                            <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Nome do produto<input name="name" required maxLength={200} className={fieldClass}/></label>
-                            <label className="text-sm font-semibold text-slate-700">Marca<input name="brand" required maxLength={200} className={fieldClass}/></label>
+                            <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Nome do produto<RequiredMark/><input name="name" required maxLength={200} className={fieldClass}/></label>
+                            <label className="text-sm font-semibold text-slate-700">Marca<RequiredMark/><input name="brand" required maxLength={200} className={fieldClass}/></label>
                             <label className="text-sm font-semibold text-slate-700">GTIN (opcional)<input name="gtin" inputMode="numeric" pattern="(?:[0-9]{8}|[0-9]{12,14})" maxLength={14} className={fieldClass} aria-describedby="gtin-help"/><span id="gtin-help" className="mt-1 block text-xs font-normal text-slate-500">8 ou de 12 a 14 algarismos.</span></label>
-                            <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Categoria<select name="category" value="ALIMENTO_SECO_INDUSTRIALIZADO" disabled className={fieldClass}><option value="ALIMENTO_SECO_INDUSTRIALIZADO">Alimento seco industrializado</option></select><span className="mt-1 block text-xs font-normal text-slate-500">Categoria disponível no catálogo atualmente.</span></label>
+                            <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Categoria<RequiredMark/><select name="category" value="ALIMENTO_SECO_INDUSTRIALIZADO" disabled className={fieldClass}><option value="ALIMENTO_SECO_INDUSTRIALIZADO">Alimento seco industrializado</option></select></label>
                         </div>
                     </section>
-                    <section className="rounded-2xl border border-slate-200 p-4 sm:p-5">
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                         <h2 className="font-bold text-slate-900">Conteúdo e embalagem</h2>
-                        <p className="mt-1 text-sm text-slate-500">Informe a quantidade comercializada na embalagem.</p>
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                            <label className="text-sm font-semibold text-slate-700">Conteúdo líquido<input name="net_content" type="number" required min={contentUnit === "kg" ? 0.001 : 1} max={contentUnit === "kg" ? 2147483.647 : 2147483647} step={contentUnit === "kg" ? 0.001 : 1} className={fieldClass} aria-describedby="net-content-help"/></label>
-                            <label className="text-sm font-semibold text-slate-700">Unidade do conteúdo<select name="net_content_unit" value={contentUnit} onChange={event => {
+                            <label className="text-sm font-semibold text-slate-700">Conteúdo líquido<RequiredMark/><input name="net_content" type="number" required min={contentUnit === "kg" ? 0.001 : 1} max={contentUnit === "kg" ? 2147483.647 : 2147483647} step={contentUnit === "kg" ? 0.001 : 1} className={fieldClass} aria-describedby="net-content-help"/></label>
+                            <label className="text-sm font-semibold text-slate-700">Unidade do conteúdo<RequiredMark/><select name="net_content_unit" value={contentUnit} onChange={event => {
                                 const unit = event.currentTarget.value;
                                 if (unit === "g" || unit === "kg" || unit === "ml" || unit === "un") setContentUnit(unit);
                             }} className={fieldClass}><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="un">un</option></select></label>
-                            <p id="net-content-help" className="text-xs text-slate-500 sm:col-span-2">O backend ainda aceita apenas g, ml e un. Valores em kg serão convertidos para gramas ao salvar (1 kg = 1.000 g).</p>
-                            <label className="text-sm font-semibold text-slate-700">Tipo de embalagem<input name="packaging_type" required maxLength={200} className={fieldClass}/></label>
-                            <label className="text-sm font-semibold text-slate-700">Quantidade por embalagem<input name="packaging_quantity" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
+                            <p id="net-content-help" className="text-xs text-slate-500 sm:col-span-2">Valores em kg são convertidos para gramas ao salvar.</p>
+                            <label className="text-sm font-semibold text-slate-700">Tipo de embalagem<RequiredMark/><input name="packaging_type" required maxLength={200} className={fieldClass}/></label>
+                            <label className="text-sm font-semibold text-slate-700">Quantidade por embalagem<RequiredMark/><input name="packaging_quantity" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
                         </div>
                     </section>
-                    <section className="rounded-2xl border border-slate-200 p-4 sm:p-5">
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                         <h2 className="font-bold text-slate-900">Peso e dimensões</h2>
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                            <label className="text-sm font-semibold text-slate-700">Peso bruto (gramas)<input name="gross_weight_grams" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
-                            <label className="text-sm font-semibold text-slate-700">Volume (cm³)<input name="volume_cm3" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
+                            <label className="text-sm font-semibold text-slate-700">Peso bruto (gramas)<RequiredMark/><input name="gross_weight_grams" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
+                            <label className="text-sm font-semibold text-slate-700">Volume (cm³)<RequiredMark/><input name="volume_cm3" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
                         </div>
                     </section>
-                    <section className="rounded-2xl border border-slate-200 p-4 sm:p-5" aria-labelledby="product-characteristics-title">
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" aria-labelledby="product-characteristics-title">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                                 <h2 id="product-characteristics-title" className="font-semibold text-slate-900">Características adicionais do produto</h2>
-                                <p id="product-characteristics-help" className="mt-1 text-sm text-slate-500">Inclua detalhes que ajudam a diferenciar este produto. Esta seção é opcional.</p>
+                                <p id="product-characteristics-help" className="mt-1 text-sm text-slate-500">Opcional · até 20 características.</p>
                             </div>
                             <span className="text-xs font-medium text-slate-500">{attributeFields.length} de 20</span>
                         </div>
@@ -474,19 +483,18 @@ function SessionAdminProductCreate() {
                         </button>
                     </section>
                 </div>
-                <aside className="space-y-3">
+                <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
                     <CanonicalImageSelection jobs={imageJobs} onChange={setImageJobs} disabled={submitting} onChecking={setImageChecking}/>
-                    <div className="rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-950">
-                        <h2 className="font-bold">Cadastro canônico</h2>
-                        <p className="mt-1">O cadastro cria um rascunho. Preços, estoque, depósitos e ofertas são gerenciados pelo fornecedor.</p>
-                        <p className="mt-2 text-blue-800">Rascunhos podem ser consultados pelo ID por administradores. Ainda não existe listagem administrativa de rascunhos; guarde o ID retornado.</p>
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+                        <h2 className="font-bold">Após salvar</h2>
+                        <p className="mt-1 leading-5">Preços e estoque são gerenciados pelo fornecedor. Guarde o ID do rascunho; ele não aparece em uma lista até ser publicado.</p>
                     </div>
                 </aside>
             </div>
-            {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-5">
-                <p className="max-w-xl text-sm leading-5 text-slate-500">Revise os dados antes de salvar. A publicação será solicitada separadamente.</p>
-                <button type="submit" className={primaryButton} disabled={submitting || imageChecking}>{submitting ? "Cadastrando…" : "Cadastrar como rascunho"}</button>
+            {error && <p role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-5 w-5 shrink-0"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-11a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-1.5 0V7Zm.75 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd"/></svg><span>{error}</span></p>}
+            <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm leading-5 text-slate-500">A publicação será solicitada separadamente.</p>
+                <button type="submit" className={`${primaryButton} w-full sm:w-auto`} disabled={submitting || imageChecking}>{submitting ? "Cadastrando…" : "Cadastrar como rascunho"}</button>
             </div>
         </form>}
     </div>;
