@@ -6,9 +6,13 @@ import { appRoutes } from "../../app/routePermissions";
 import {SupplierIcon, type IconName} from "./SupplierVisuals";
 import type { Permission } from "../../features/auth/mocks/users.mock";
 
-type PortalType = "supplier" | "buyer";
+type PortalType = "supplier" | "buyer" | "admin";
 
 type SidebarProps = {
+    navigation?: {path: string; label: string}[];
+    homePath?: string;
+    accountPath?: string | null;
+    caption?: string;
     permissions: Permission[];
     portal?: PortalType;
     pendingOrdersCount?: number;
@@ -31,6 +35,7 @@ const buyerRoutes = [
 ];
 
 export function Sidebar({
+    navigation, homePath = "/fornecedor", accountPath = "/fornecedor/conta", caption,
     permissions,
     portal = "supplier",
     pendingOrdersCount = 0,
@@ -38,23 +43,25 @@ export function Sidebar({
     onLogout,
     developmentControls,
 }: SidebarProps) {
-    const routes =
-        portal === "buyer" ? buyerRoutes : appRoutes;
+    const routes = portal === "buyer" ? buyerRoutes : appRoutes;
 
     const visibleItems = routes.filter((route) =>
         permissions.includes(route.permission)
     );
 
-    if (portal === "supplier") {
-        const icons: Record<string, IconName> = {"/fornecedor": "home", "/fornecedor/pedidos": "orders", "/fornecedor/produtos": "products", "/fornecedor/estoque": "inventory", "/fornecedor/rotas": "routes"};
-        const supplierItems = appRoutes.filter(route => permissions.includes(route.permission) || route.path === "/fornecedor/rotas");
+    if (portal === "supplier" || portal === "admin") {
+        const icons: Record<string, IconName> = {
+            "/fornecedor": "home", "/fornecedor/pedidos": "orders", "/fornecedor/produtos": "products", "/fornecedor/estoque": "inventory", "/fornecedor/rotas": "routes",
+            "/admin": "home", "/admin/products": "products", "/admin/products/new": "add",
+        };
+        const supplierItems = navigation ?? (portal === "admin" ? [] : appRoutes.filter(route => permissions.includes(route.permission) || route.path === "/fornecedor/rotas"));
         return <aside className="supplier-sidebar">
-            <NavLink to="/fornecedor" className="supplier-brand"><span className="supplier-brand-mark" aria-hidden="true">↯</span><span>Rota<span className="text-blue-600">Log</span></span></NavLink>
-            <p className="supplier-nav-caption">ÁREA DO FORNECEDOR</p>
-            <nav aria-label="Menu principal" className="space-y-1">{supplierItems.map(route => <NavLink key={route.path} to={route.path} end={route.path === "/fornecedor"} className={({isActive}) => `supplier-nav-link ${isActive ? "is-active" : ""}`}><SupplierIcon name={icons[route.path] ?? "home"}/><span>{route.label}</span>{route.path === "/fornecedor/pedidos" && pendingOrdersCount > 0 && <span className="supplier-nav-count" aria-label={`${pendingOrdersCount} ${pendingOrdersCount === 1 ? "pedido aguardando aceite" : "pedidos aguardando aceite"}`} aria-live="polite">{pendingOrdersCount}</span>}</NavLink>)}</nav>
+            <NavLink to={homePath} className="supplier-brand"><span className="supplier-brand-mark" aria-hidden="true">↯</span><span>Rota<span className="text-blue-600">Log</span></span></NavLink>
+            <p className="supplier-nav-caption">{caption ?? (portal === "admin" ? "ADMINISTRAÇÃO" : "ÁREA DO FORNECEDOR")}</p>
+            <nav aria-label={portal === "admin" ? "Menu administrativo" : "Menu principal"} className="space-y-1">{supplierItems.map(route => <NavLink key={route.path} to={route.path} end={route.path === "/fornecedor" || route.path === "/admin"} className={({isActive}) => `supplier-nav-link ${isActive ? "is-active" : ""}`}><SupplierIcon name={icons[route.path] ?? "home"}/><span>{route.label}</span>{route.path === "/fornecedor/pedidos" && pendingOrdersCount > 0 && <span className="supplier-nav-count" aria-label={`${pendingOrdersCount} ${pendingOrdersCount === 1 ? "pedido aguardando aceite" : "pedidos aguardando aceite"}`} aria-live="polite">{pendingOrdersCount}</span>}</NavLink>)}</nav>
             <div className="supplier-sidebar-bottom">
                 {import.meta.env.DEV && developmentControls}
-                <NavLink to="/fornecedor/conta" className={({isActive}) => `supplier-nav-link ${isActive ? "is-active" : ""}`}><SupplierIcon name="account"/>Minha conta</NavLink>
+                {accountPath && <NavLink to={accountPath} className={({isActive}) => `supplier-nav-link ${isActive ? "is-active" : ""}`}><SupplierIcon name="account"/>Minha conta</NavLink>}
                 {organizationName && <p className="mt-4 break-words px-3 text-xs text-slate-500">{organizationName}</p>}
                 {onLogout && <button type="button" className="supplier-nav-link supplier-logout" onClick={onLogout}>Sair</button>}
             </div>

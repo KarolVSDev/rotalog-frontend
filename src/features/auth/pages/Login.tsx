@@ -1,3 +1,5 @@
+import { loginDestination } from "../../../app/routePermissions";
+import { authMode } from "../../../shared/api/config";
 
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -39,39 +41,7 @@ export function Login() {
         try {
             const user = await login({ email, password });
 
-            const requestedPath = locationState?.from;
-
-            const defaultPath = user.role === "ROTALOG_ADMIN"
-                ? "/admin"
-                : user.role === "BUYER_ADMIN"
-                    ? user.capabilities?.includes("catalog:read") ? "/" : "/comprador/compras"
-                    : "/fornecedor";
-
-            const destination =
-                typeof requestedPath === "string" &&
-                requestedPath.startsWith("/") &&
-                !requestedPath.startsWith("//") &&
-                !requestedPath.startsWith("/\\") &&
-                !requestedPath.includes("\\") &&
-                !requestedPath.includes("://") &&
-                !["/login", "/cadastro"].includes(requestedPath) &&
-                (user.role === "ROTALOG_ADMIN"
-                    ? requestedPath === "/admin" || requestedPath.startsWith("/admin/")
-                    : user.role === "BUYER_ADMIN"
-                    ? requestedPath.startsWith("/produto/")
-                        ? user.capabilities?.includes("catalog:read")
-                        : requestedPath.startsWith("/comprador/compras")
-                            ? user.capabilities?.includes("purchase:read")
-                            : requestedPath.startsWith("/comprador/carrinho")
-                                ? user.capabilities?.includes("checkout:create")
-                                : requestedPath.startsWith("/comprador")
-                                    ? user.capabilities?.includes("catalog:read") || user.capabilities?.includes("purchase:read")
-                                    : requestedPath === "/"
-                                        ? user.capabilities?.includes("catalog:read") || user.capabilities?.includes("purchase:read")
-                                        : false
-                    : requestedPath.startsWith("/fornecedor"))
-                    ? requestedPath
-                    : defaultPath;
+            const destination = loginDestination(user, locationState?.from, authMode === "api");
 
             navigate(destination, { replace: true });
         } catch (error) {
@@ -239,50 +209,6 @@ export function Login() {
                                 {isSubmitting ? "Entrando..." : "Entrar"}
                             </button>
                         </form>
-
-                        {/* Login social */}
-                        <div className="my-4 flex items-center gap-3">
-                            <div className="h-px flex-1 bg-slate-200" />
-                            <span className="text-xs text-slate-500">
-                                Ou continue com
-                            </span>
-                            <div className="h-px flex-1 bg-slate-200" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setMessage(
-                                        "O login com Google ainda não está disponível."
-                                    )
-                                }
-                                className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-3 text-xs font-medium transition hover:bg-slate-50"
-                            >
-                                <span className="text-base font-bold text-[#4285F4]">
-                                    G
-                                </span>
-                                Google
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setMessage(
-                                        "O login com Microsoft ainda não está disponível."
-                                    )
-                                }
-                                className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-3 text-xs font-medium transition hover:bg-slate-50"
-                            >
-                                <span className="grid h-4 w-4 grid-cols-2 gap-[2px]">
-                                    <span className="bg-[#F25022]" />
-                                    <span className="bg-[#7FBA00]" />
-                                    <span className="bg-[#00A4EF]" />
-                                    <span className="bg-[#FFB900]" />
-                                </span>
-                                Microsoft
-                            </button>
-                        </div>
 
                         <p className="mt-4 text-center text-sm text-slate-500">
                             Não tem uma conta?{" "}

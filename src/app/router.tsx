@@ -1,47 +1,54 @@
 import { createBrowserRouter, Outlet } from "react-router-dom";
 
-import { Login } from "../features/auth/pages/Login";
-import { Register } from "../features/auth/pages/Register";
 import { ProtectedRoute } from "../features/auth/components/ProtectedRoute";
 import { authMode } from "../shared/api/config";
 
 import { NotFoundPage } from "../shared/pages/NotFoundPage";
-import { SupplierRoutes } from "../features/orders/pages/SupplierRoutes";
-import { SupplierAccount } from "../features/account/pages/SupplierAccount";
-import { ProductCatalog } from "../features/catalog/pages/ProductCatalog";
-import { ProductDetails } from "../features/catalog/pages/ProductDetails";
+import { RouteErrorPage } from "../shared/pages/RouteErrorPage";
+
 import { AppLayout } from "../shared/components/AppLayout";
 import { MarketplaceLayout } from "../shared/components/MarketplaceLayout";
 
-import { SupplierDashboard } from "../features/dashboard/pages/SupplierDashboard";
-import { SupplierOrders } from "../features/orders/pages/SupplierOrders";
-import { SupplierProducts } from "../features/products/pages/SupplierProducts";
-import { ApiSupplierProducts } from "../features/products/api/ApiSupplierProducts";
-import { SupplierInventory } from "../features/inventory/pages/SupplierInventory";
-import { ApiSupplierInventory } from "../features/inventory/api/ApiSupplierInventory";
 import { ApiOrdersProvider } from "../features/orders/api/OrdersProvider";
-import { ApiSupplierOrders } from "../features/orders/api/ApiSupplierOrders";
-import { ApiSupplierDashboard } from "../features/dashboard/pages/ApiSupplierDashboard";
 
-import { BuyerAccount } from "../features/account/pages/BuyerAccount";
-import { BuyerCart } from "../features/cart/pages/BuyerCart";
-import { BuyerPurchases } from "../features/purchases/pages/BuyerPurchases";
-import { BuyerPurchaseDetails } from "../features/purchases/pages/BuyerPurchaseDetails";
-import {
-    ApiBuyerProductDetails,
-    ApiBuyerCart,
-    ApiBuyerPurchases,
-    ApiBuyerPurchaseDetails,
-} from "../features/buyer/api/BuyerPages";
-import { ApiBuyerHome } from "../features/buyer/api/ApiBuyerHome";
 import { AdminLayout } from "../features/admin/layout/AdminLayout";
-import { AdminAccount, AdminCatalog, AdminOverview, AdminProductCreate } from "../features/admin/pages/AdminPages";
+
+import { lazyPage } from "./lazyPage";
+
+const Login = lazyPage(() => import("./pages/AuthPages").then(module => ({ default: module.Login })));
+const Register = lazyPage(() => import("./pages/AuthPages").then(module => ({ default: module.Register })));
+const ApiBuyerHome = lazyPage(() => import("./pages/BuyerPortal").then(module => ({ default: module.ApiBuyerHome })));
+const ApiBuyerProductDetails = lazyPage(() => import("./pages/BuyerPortal").then(module => ({ default: module.ApiBuyerProductDetails })));
+const ApiBuyerCart = lazyPage(() => import("./pages/BuyerPortal").then(module => ({ default: module.ApiBuyerCart })));
+const ApiBuyerPurchases = lazyPage(() => import("./pages/BuyerPortal").then(module => ({ default: module.ApiBuyerPurchases })));
+const ApiBuyerPurchaseDetails = lazyPage(() => import("./pages/BuyerPortal").then(module => ({ default: module.ApiBuyerPurchaseDetails })));
+const BuyerAccount = lazyPage(() => import("./pages/BuyerPortal").then(module => ({ default: module.BuyerAccount })));
+const ApiSupplierProducts = lazyPage(() => import("./pages/SupplierPortal").then(module => ({ default: module.ApiSupplierProducts })));
+const ApiSupplierInventory = lazyPage(() => import("./pages/SupplierPortal").then(module => ({ default: module.ApiSupplierInventory })));
+const ApiSupplierOrders = lazyPage(() => import("./pages/SupplierPortal").then(module => ({ default: module.ApiSupplierOrders })));
+const ApiSupplierDashboard = lazyPage(() => import("./pages/SupplierPortal").then(module => ({ default: module.ApiSupplierDashboard })));
+const SupplierRoutes = lazyPage(() => import("./pages/SupplierPortal").then(module => ({ default: module.SupplierRoutes })));
+const SupplierAccount = lazyPage(() => import("./pages/SupplierPortal").then(module => ({ default: module.SupplierAccount })));
+const ProductCatalog = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.ProductCatalog })));
+const ProductDetails = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.ProductDetails })));
+const SupplierDashboard = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.SupplierDashboard })));
+const SupplierOrders = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.SupplierOrders })));
+const SupplierProducts = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.SupplierProducts })));
+const SupplierInventory = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.SupplierInventory })));
+const BuyerCart = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.BuyerCart })));
+const BuyerPurchases = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.BuyerPurchases })));
+const BuyerPurchaseDetails = lazyPage(() => import("./pages/LegacyPages").then(module => ({ default: module.BuyerPurchaseDetails })));
+const AdminAccount = lazyPage(() => import("../features/admin/pages/AdminPages").then(module => ({ default: module.AdminAccount })));
+const AdminCatalog = lazyPage(() => import("../features/admin/pages/AdminPages").then(module => ({ default: module.AdminCatalog })));
+const AdminOverview = lazyPage(() => import("../features/admin/pages/AdminPages").then(module => ({ default: module.AdminOverview })));
+const AdminProductCreate = lazyPage(() => import("../features/admin/pages/AdminPages").then(module => ({ default: module.AdminProductCreate })));
+const PlanningDashboard = lazyPage(() => import("../features/planning/pages/PlanningDashboard").then(module => ({ default: module.PlanningDashboard })));
 
 export const router = createBrowserRouter([
     {
         path: "/",
         element: <MarketplaceLayout />,
-        errorElement: <NotFoundPage />,
+        errorElement: <RouteErrorPage />,
         children: [
             { index: true, element: authMode === "api" ? <ApiBuyerHome /> : <ProductCatalog /> },
             {
@@ -83,8 +90,8 @@ export const router = createBrowserRouter([
             },
         ],
     },
-    { path: "/login", element: <Login /> },
-    { path: "/cadastro", element: <Register /> },
+    { path: "/login", element: <Login />, errorElement: <RouteErrorPage /> },
+    { path: "/cadastro", element: <Register />, errorElement: <RouteErrorPage /> },
     {
         path: "/admin",
         element: (
@@ -92,7 +99,7 @@ export const router = createBrowserRouter([
                 <AdminLayout />
             </ProtectedRoute>
         ),
-        errorElement: <NotFoundPage />,
+        errorElement: <RouteErrorPage />,
         children: [
             { index: true, element: <AdminOverview /> },
             { path: "products", element: <AdminCatalog /> },
@@ -106,11 +113,11 @@ export const router = createBrowserRouter([
     {
         path: "/fornecedor",
         element: (
-            <ProtectedRoute allowedRoles={["SUPPLIER_OPERATOR"]}>
+            <ProtectedRoute allowedRoles={authMode === "api" ? ["SUPPLIER_OPERATOR", "ROUTE_PLANNER"] : ["SUPPLIER_OPERATOR"]}>
                 {authMode === "api" ? <ApiOrdersProvider><AppLayout /></ApiOrdersProvider> : <AppLayout />}
             </ProtectedRoute>
         ),
-        errorElement: <NotFoundPage />,
+        errorElement: <RouteErrorPage />,
         children: [
             { index: true, element: authMode === "api" ? <ApiSupplierDashboard /> : <SupplierDashboard /> },
             { path: "pedidos", element: authMode === "api" ? <ApiSupplierOrders /> : <SupplierOrders /> },
@@ -118,6 +125,7 @@ export const router = createBrowserRouter([
             { path: "estoque", element: authMode === "api" ? <ApiSupplierInventory /> : <SupplierInventory /> },
             { path: "conta", element: <SupplierAccount /> },
             { path: "rotas", element: <SupplierRoutes /> },
+            ...(authMode === "api" ? [{ path: "planejamento", element: <ProtectedRoute allowedRoles={["ROUTE_PLANNER"]} capability="route:plan"><PlanningDashboard /></ProtectedRoute> }] : []),
         ],
     },
     { path: "*", element: <NotFoundPage /> },

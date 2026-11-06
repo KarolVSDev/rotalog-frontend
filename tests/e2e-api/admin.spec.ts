@@ -30,6 +30,8 @@ type State = {
     publishNetwork: boolean;
     publishStatus: number;
     adminRequests: string[];
+    catalogPages: { page: number; pageSize: number }[];
+    draftDetail: boolean;
 };
 
 async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
@@ -47,6 +49,8 @@ async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
         publishNetwork: false,
         publishStatus: 0,
         adminRequests: [],
+        catalogPages: [],
+        draftDetail: false,
     };
     if (restore) await page.addInitScript(() => sessionStorage.setItem("rotalog:api-csrf", "synthetic-csrf"));
     await page.route("http://localhost:8000/**", async route => {
@@ -77,6 +81,7 @@ async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
             const items = state.products.filter(item => item.publication_state === "PUBLISHED");
             const pageNumber = Number(url.searchParams.get("page") ?? "1");
             const pageSize = Number(url.searchParams.get("page_size") ?? "25");
+            state.catalogPages.push({ page: pageNumber, pageSize });
             const search = url.searchParams.get("search")?.toLowerCase() ?? "";
             const filtered = items.filter(item => item.name.toLowerCase().includes(search));
             const start = (pageNumber - 1) * pageSize;
@@ -102,9 +107,14 @@ async function setup(page: Page, role: Role = "ROTALOG_ADMIN", restore = true) {
             state.products = state.products.map(item => item.id === response.id ? response : item);
             return route.fulfill({ json: response });
         }
+        if (path.startsWith("/api/v1/products/") && path.endsWith("/images") && request.method() === "GET") {
+            const id = path.split("/").at(-2);
+            const found = state.products.find(item => item.id === id);
+            return route.fulfill({ json: { product_id: id, product_version: found?.version ?? 1, images: [], primary_image_id: null, is_synthetic: true } });
+        }
         if (path.startsWith("/api/v1/products/") && request.method() === "GET") {
             const id = path.split("/").at(-1);
-            const found = state.products.find(item => item.id === id && item.publication_state === "PUBLISHED");
+            const found = state.products.find(item => item.id === id && (state.draftDetail || item.publication_state === "PUBLISHED"));
             return found
                 ? route.fulfill({ json: found })
                 : route.fulfill({ status: 404, json: { error: { code: "PRODUCT_NOT_FOUND", message: "Produto não encontrado.", request_id: "request-123" } } });
@@ -126,6 +136,9 @@ async function loginAsAdmin(page: Page) {
 }
 
 async function fillValidProduct(page: Page) {
+    if (!await page.getByLabel("Nome do produto").isVisible()) {
+        await page.getByRole("button", { name: "Iniciar cadastro individual" }).click();
+    }
     await page.getByLabel("Nome do produto").fill("Arroz integral 6x1kg");
     await page.getByLabel("Marca").fill("Marca sintética");
     await page.getByLabel("GTIN (opcional)").fill("12345678");
@@ -140,7 +153,9 @@ test("login administrativo consulta perfil e redireciona ao portal", async ({ pa
     const state = await setup(page, "ROTALOG_ADMIN", false);
     await loginAsAdmin(page);
     await expect(page.getByRole("heading", { name: "Catálogo canônico" })).toBeVisible();
-    expect(state.adminRequests).toEqual([]);
+    await expect(page.getByText("Total informado pela API: 0")).toBeVisible();
+    expect(state.adminRequests.length).toBeGreaterThan(0);
+    expect(state.adminRequests.every(path => path === "GET /api/v1/products")).toBe(true);
 });
 
 test("restaura sessão administrativa diretamente na rota protegida", async ({ page }) => {
@@ -148,7 +163,95 @@ test("restaura sessão administrativa diretamente na rota protegida", async ({ p
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Catálogo canônico" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Produtos publicados", exact: true })).toBeVisible();
-    expect(state.adminRequests).toEqual([]);
+    await expect(page.getByText("Total informado pela API: 0")).toBeVisible();
+    expect(state.adminRequests.length).toBeGreaterThan(0);
+    expect(state.adminRequests.every(path => path === "GET /api/v1/products")).toBe(true);
+});
+
+test("visão geral pagina o catálogo e calcula indicadores globais somente após carregar tudo", async ({ page }) => {
+    const state = await setup(page);
+    state.products = Array.from({ length: 101 }, (_, index) => ({
+        ...product,
+        id: `published-${index}`,
+        name: `Produto ${index}`,
+        brand: `Marca ${index % 6}`,
+        gtin: index % 2 === 0 ? "12345678" : null,
+    }));
+    await page.goto("/admin");
+    const indicators = page.getByRole("region", { name: "Indicadores do catálogo" });
+    await expect(indicators.getByText("101", { exact: true })).toBeVisible();
+    await expect(indicators.getByText("6", { exact: true })).toBeVisible();
+    await expect(indicators.getByText("51", { exact: true })).toBeVisible();
+    await expect(indicators.getByRole("heading", { name: "Produtos publicados por marca" })).toBeVisible();
+    await expect(indicators.getByText("Outras marcas", { exact: true })).toBeVisible();
+    expect(state.catalogPages).toContainEqual({ page: 1, pageSize: 100 });
+    expect(state.catalogPages).toContainEqual({ page: 2, pageSize: 100 });
+    expect(state.adminRequests.some(path => path.includes("/admin/products"))).toBe(false);
+});
+
+test("admin reutiliza o layout compartilhado nas quatro rotas e mantém somente a navegação autorizada", async ({ page }) => {
+    await setup(page);
+    const adminRoutes = [
+        ["/admin", "Catálogo canônico"],
+        ["/admin/products", "Produtos publicados"],
+        ["/admin/products/new", "Cadastrar produto canônico"],
+        ["/admin/account", "Minha conta"],
+    ] as const;
+    for (const [path, heading] of adminRoutes) {
+        await page.goto(path);
+        await expect(page.locator("[data-portal='admin']")).toBeVisible();
+        await expect(page.locator(".supplier-sidebar")).toBeVisible();
+        await expect(page.locator(".supplier-topbar")).toContainText("Portal do administrador");
+        await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
+    const sidebar = page.locator(".supplier-sidebar");
+    await expect(sidebar.getByRole("link", { name: "Visão geral", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: "Produtos publicados", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: "Cadastrar produto", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: "Minha conta", exact: true })).toHaveAttribute("href", "/admin/account");
+    for (const label of ["Pedidos", "Estoque", "Rotas", "Planejamento"]) {
+        await expect(sidebar.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+    }
+});
+
+test("menu mobile administrativo mantém identidade e não exibe rotas comerciais ou de planejamento", async ({ page }) => {
+    await setup(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/admin");
+    await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+    const menu = page.getByRole("dialog", { name: "Menu do administrador" });
+    await expect(menu.getByRole("link", { name: "Visão geral", exact: true })).toBeVisible();
+    await expect(menu.getByRole("link", { name: "Cadastrar produto", exact: true })).toBeVisible();
+    await expect(menu.getByRole("link", { name: "Minha conta", exact: true })).toHaveAttribute("href", "/admin/account");
+    for (const label of ["Pedidos", "Estoque", "Rotas", "Planejamento"]) {
+        await expect(menu.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+    }
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+});
+
+test("menu e guards administrativos exigem catalog e escondem cadastro sem product write", async ({ page }) => {
+    const state = await setup(page);
+    state.capabilities = ["catalog:read"];
+    await page.goto("/admin");
+    await expect(page.getByRole("heading", { name: "Catálogo canônico" })).toBeVisible();
+    await expect(page.locator(".supplier-sidebar").getByRole("link", { name: "Cadastrar produto", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Cadastrar produto", exact: true })).toHaveCount(0);
+    await page.goto("/admin/products");
+    await expect(page.getByRole("heading", { name: "Produtos publicados" })).toBeVisible();
+    await expect(page.locator(".supplier-sidebar").getByRole("link", { name: "Cadastrar produto", exact: true })).toHaveCount(0);
+    await page.goto("/admin/products/new");
+    await expect(page.getByRole("alert")).toContainText("403");
+    await expect(page.getByRole("heading", { name: "Cadastrar produto canônico" })).toHaveCount(0);
+    expect(state.createRequests).toHaveLength(0);
+
+    const missingCatalogPage = await page.context().newPage();
+    const missingCatalog = await setup(missingCatalogPage);
+    missingCatalog.capabilities = ["product:write"];
+    await missingCatalogPage.goto("/admin");
+    await expect(missingCatalogPage).toHaveURL(/\/login$/);
+    await expect(missingCatalogPage.getByRole("heading", { name: "Catálogo canônico" })).toHaveCount(0);
+    await missingCatalogPage.close();
 });
 
 for (const role of ["BUYER_ADMIN", "SUPPLIER_OPERATOR"] as const) {
@@ -185,8 +288,11 @@ test("lista apenas publicados, pesquisa, pagina e exibe estado vazio", async ({ 
 test("valida formulário e cria produto canônico como rascunho", async ({ page }) => {
     const state = await setup(page);
     await page.goto("/admin/products/new");
-    await expect(page.getByRole("img", { name: "Imagem de novo produto não disponível" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /upload|adicionar imagem/i })).toHaveCount(0);
+    await expect(page.locator("#admin-product-form")).toBeHidden();
+    await expect(page.getByRole("button", { name: /importar|excel|planilha/i })).toHaveCount(0);
+    await page.getByRole("button", { name: "Iniciar cadastro individual" }).click();
+    await expect(page.locator("#admin-product-form")).toBeVisible();
+    await expect(page.getByLabel("Selecionar imagens", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Características adicionais do produto" })).toBeVisible();
     await expect(page.getByLabel("Característica", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Cadastrar como rascunho" }).click();
@@ -246,6 +352,7 @@ test("cadastra produto sem características adicionais", async ({ page }) => {
 test("limita a vinte características permitidas pela API", async ({ page }) => {
     await setup(page);
     await page.goto("/admin/products/new");
+    await page.getByRole("button", { name: "Iniciar cadastro individual" }).click();
     for (let index = 0; index < 20; index++) {
         await page.getByRole("button", { name: "Adicionar característica" }).click();
     }
@@ -272,6 +379,11 @@ test("publica com expected_version e encontra produto no catálogo", async ({ pa
     await page.goto("/admin/products/new");
     await fillValidProduct(page);
     await page.getByRole("button", { name: "Cadastrar como rascunho" }).click();
+    await expect(page.getByText("Rascunho criado", { exact: true })).toBeVisible();
+    await page.locator(".supplier-sidebar").getByRole("link", { name: "Produtos publicados", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Produtos publicados" })).toBeVisible();
+    await page.locator(".supplier-sidebar").getByRole("link", { name: "Cadastrar produto", exact: true }).click();
+    await expect(page.getByText("Rascunho criado", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Publicar produto" }).click();
     await expect(page.getByText("Produto publicado", { exact: true })).toBeVisible();
     expect(state.publishRequests).toEqual([{ expected_version: 1 }]);
@@ -291,8 +403,23 @@ test("conflito de publicação preserva rascunho e oferece somente consulta segu
     await expect(page.getByRole("alert")).toContainText("versão do produto mudou");
     await expect(page.getByRole("button", { name: "Publicar produto" })).toHaveCount(0);
     await page.getByRole("button", { name: "Consultar se foi publicado" }).click();
-    await expect(page.getByText(/Backend não permite consultar rascunhos/)).toBeVisible();
+    await expect(page.getByText(/A consulta por ID não encontrou este produto/)).toBeVisible();
     expect(state.publishRequests).toEqual([{ expected_version: 1 }]);
+});
+
+test("consulta por ID de rascunho não apresenta publicação bem-sucedida", async ({ page }) => {
+    const state = await setup(page);
+    state.publishStatus = 409;
+    state.draftDetail = true;
+    await page.goto("/admin/products/new");
+    await fillValidProduct(page);
+    await page.getByRole("button", { name: "Cadastrar como rascunho" }).click();
+    await page.getByRole("button", { name: "Publicar produto" }).click();
+    await page.getByRole("button", { name: "Consultar se foi publicado" }).click();
+    await expect(page.getByText(/A consulta por ID confirmou que o produto ainda não está publicado/)).toBeVisible();
+    await expect(page.getByText("Produto publicado", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Rascunho criado", { exact: true })).toBeVisible();
+    expect(state.publishRequests).toHaveLength(1);
 });
 
 test("falha de rede após cadastro não repete POST e explica a limitação", async ({ page }) => {

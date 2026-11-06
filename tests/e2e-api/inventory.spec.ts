@@ -109,7 +109,7 @@ test('catálogo sem oferta não gera saldo e navegação mantém criação real 
     await page.getByRole('tab',{name:'Catálogo',exact:true}).click();
     await page.getByRole('searchbox',{name:'Pesquisar por nome',exact:true}).fill('Produto sem oferta');
     await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
-    await expect(page.getByRole('cell',{name:'Produto sem oferta',exact:true})).toBeVisible();
+    await expect(page.getByRole('cell').filter({ has: page.getByText('Produto sem oferta', { exact: true }) })).toBeVisible();
     await page.getByText('Produto não encontrado?',{exact:true}).click();
     await expect(page.getByRole('button',{name:'Solicitar cadastro de produto',exact:true})).toBeDisabled();
     await expect(page.getByLabel('Solicitação de novos produtos',{exact:true})).toContainText('A inclusão de novos produtos por esta área ainda não está disponível.');

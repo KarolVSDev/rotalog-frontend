@@ -1,16 +1,19 @@
 import { authenticatedRequest } from "../../services/apiAuth.service";
 import { ApiError } from "../../../shared/api/http";
+import type { CanonicalProductImage } from "../../../shared/api/productImageTypes";
 
-// catalog/schemas.py: ProductResponse. No price, image or inventory fields.
+// catalog/schemas.py: ProductResponse. No price or inventory fields.
 export type CatalogProduct = {
     id: string; name: string; brand: string; category: string; gtin: string | null;
     net_content: number; net_content_unit: "g" | "ml" | "un";
     packaging_type: string; packaging_quantity: number; gross_weight_grams: number;
     volume_cm3: number; variant_attributes: Record<string, string>;
     publication_state: string; version: number; demo_run_id: string; is_synthetic: true;
+    images?: CanonicalProductImage[]; primary_image?: CanonicalProductImage | null;
 };
-export type ProductCreate = Omit<CatalogProduct, "id" | "publication_state" | "version" | "demo_run_id" | "is_synthetic">;
+export type ProductCreate = Omit<CatalogProduct, "id" | "publication_state" | "version" | "demo_run_id" | "is_synthetic" | "images" | "primary_image">;
 export type CatalogPage = { items: CatalogProduct[]; total: number; page: number; page_size: number; is_synthetic: true; label: string };
+export type CatalogOverview = { total: number; products: CatalogProduct[] };
 type Transport = <T>(path: string, options?: RequestInit, replayUnauthorized?: boolean) => Promise<T>;
 export class CatalogRepository {
     private organizationId: string;
@@ -23,10 +26,44 @@ export class CatalogRepository {
         if (!this.organizationId) throw new Error("Organização não disponível. Entre novamente.");
         return { headers: { "X-Organization-Id": this.organizationId } };
     }
-    async list(page = 1, search = ""): Promise<CatalogPage> {
-        const query = new URLSearchParams({page: String(page), page_size: "25"});
+    async list(page = 1, search = "", pageSize = 25): Promise<CatalogPage> {
+        const query = new URLSearchParams({page: String(page), page_size: String(pageSize)});
         if (search.trim()) query.set("search", search.trim());
         return this.transport<CatalogPage>(`/api/v1/products?${query}`, this.options());
+    }
+    async listAllPublished(): Promise<CatalogOverview> {
+        const pageSize = 100;
+        const firstPage = await this.list(1, "", pageSize);
+        if (
+            firstPage.page !== 1 || firstPage.page_size !== pageSize ||
+            !Number.isInteger(firstPage.total) || firstPage.total < 0 ||
+            firstPage.items.length > firstPage.total
+        ) {
+            throw new Error("A API retornou uma paginação inválida para o catálogo.");
+        }
+
+        const products = new Map(firstPage.items.map(product => [product.id, product]));
+        const pageCount = Math.ceil(firstPage.total / pageSize);
+        for (let page = 2; page <= pageCount; page += 1) {
+            const nextPage = await this.list(page, "", pageSize);
+            if (
+                nextPage.page !== page || nextPage.page_size !== pageSize ||
+                nextPage.total !== firstPage.total || nextPage.items.length === 0
+            ) {
+                throw new Error("O catálogo mudou durante a consulta. Atualize a página antes de usar os indicadores.");
+            }
+            for (const product of nextPage.items) {
+                if (products.has(product.id)) {
+                    throw new Error("A API repetiu um produto entre páginas do catálogo.");
+                }
+                products.set(product.id, product);
+            }
+        }
+
+        if (products.size !== firstPage.total) {
+            throw new Error("Não foi possível carregar todas as páginas do catálogo para calcular os indicadores.");
+        }
+        return { total: firstPage.total, products: [...products.values()] };
     }
     async detail(id: string): Promise<CatalogProduct> {
         const product = await this.transport<CatalogProduct>(`/api/v1/products/${encodeURIComponent(id)}`, this.options());

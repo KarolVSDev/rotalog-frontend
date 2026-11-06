@@ -3,6 +3,7 @@ import { authenticatedRequest } from "../../services/apiAuth.service";
 import type { ApiOrder } from "../../orders/api/contracts";
 import { CatalogRepository, type CatalogPage, type CatalogProduct } from "../../products/api/catalogRepository";
 import type { Offer, OfferPage } from "../../products/api/offersRepository";
+import { buyerCatalogPage, type BuyerCatalogPage } from "./buyerCatalog";
 
 type Transport = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Page<T> = { items: T[]; total: number; page: number; page_size: number };
@@ -69,6 +70,14 @@ export class BuyerReadRepository {
             const result: CatalogPage = await this.catalog.list(page);
             return result;
         });
+    }
+
+    async availableCatalog(search: string, page: number): Promise<BuyerCatalogPage> {
+        const [products, offers] = await Promise.all([
+            this.products(),
+            this.offers(),
+        ]);
+        return buyerCatalogPage(products, offers, search, page);
     }
 
     offers(productId?: string): Promise<Offer[]> {

@@ -36,6 +36,7 @@ const product = {
     net_content_unit: "g",
     packaging_type: "SACO",
     packaging_quantity: 6,
+    publication_state: "PUBLISHED",
 };
 const offer = {
     id: "offer-1",
@@ -175,7 +176,8 @@ test("explains when only one offer is available and has no comparison", async ()
 test("shows empty, loading, and error states for product offers", async () => {
     mocks.offers.mockResolvedValueOnce([]);
     renderRoute("/produto/product-1", <BuyerApiProductDetails />, "/produto/:productId");
-    expect(await screen.findByText("Não há ofertas ativas para este produto.")).toBeTruthy();
+    expect(await screen.findByText(/Produto indisponível para compra/)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Arroz" })).toBeNull();
     cleanup();
 
     let resolveProduct!: (value: typeof product) => void;
