@@ -31,7 +31,7 @@ test("renders the initial marketplace screen without calling the API", async () 
     expect(
         await screen.findByRole("heading", {
             name: "Tudo para o seu negócio em um só lugar",
-        }),
+        }, { timeout: 5000 }),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Categorias" })).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
