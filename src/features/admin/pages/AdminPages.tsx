@@ -24,6 +24,7 @@ import { AdminProductGallery } from "../../products/components/AdminProductGalle
 import { ProductImagesRepository, imageOperationError, type ImageJob, type ProductGallery } from "../../products/api/productImagesRepository";
 import { AuthenticatedProductImage } from "../../../shared/components/AuthenticatedProductImage";
 import type { AdminWorkflow } from "../layout/AdminLayout";
+import { parseProductContent } from "./productContent";
 
 const primaryButton = "inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700";
 const secondaryButton = "inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700";
@@ -211,6 +212,7 @@ function positiveInteger(formData: FormData, name: string, label: string) {
     return number;
 }
 type VariantAttributeField = { id: number; name: string; description: string };
+type FormContentUnit = ProductCreate["net_content_unit"] | "kg";
 
 function normalizedAttributeName(name: string): string {
     return name.trim()
@@ -247,8 +249,7 @@ function productInput(formData: FormData, attributeFields: VariantAttributeField
         brand: text("brand", "Marca"),
         category: "ALIMENTO_SECO_INDUSTRIALIZADO",
         gtin: gtin || null,
-        net_content: positiveInteger(formData, "net_content", "Conteúdo líquido"),
-        net_content_unit: String(formData.get("net_content_unit")) as ProductCreate["net_content_unit"],
+        ...parseProductContent(formData),
         packaging_type: text("packaging_type", "Tipo de embalagem"),
         packaging_quantity: positiveInteger(formData, "packaging_quantity", "Quantidade por embalagem"),
         gross_weight_grams: positiveInteger(formData, "gross_weight_grams", "Peso bruto"),
@@ -267,6 +268,7 @@ function SessionAdminProductCreate() {
     const workflow = useOutletContext<AdminWorkflow>();
     const repository = useMemo(() => new CatalogRepository(user?.organization_id ?? ""), [user?.organization_id]);
     const [formOpen, setFormOpen] = useState(false);
+    const [contentUnit, setContentUnit] = useState<FormContentUnit>("g");
     const [attributeFields, setAttributeFields] = useState<VariantAttributeField[]>([]);
     const nextAttributeId = useRef(0);
     const [error, setError] = useState("");
@@ -398,8 +400,12 @@ function SessionAdminProductCreate() {
                         <h2 className="font-bold text-slate-900">Conteúdo e embalagem</h2>
                         <p className="mt-1 text-sm text-slate-500">Informe a quantidade comercializada na embalagem.</p>
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                            <label className="text-sm font-semibold text-slate-700">Conteúdo líquido<input name="net_content" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
-                            <label className="text-sm font-semibold text-slate-700">Unidade do conteúdo<select name="net_content_unit" defaultValue="g" className={fieldClass}><option value="g">g</option><option value="ml">ml</option><option value="un">un</option></select></label>
+                            <label className="text-sm font-semibold text-slate-700">Conteúdo líquido<input name="net_content" type="number" required min={contentUnit === "kg" ? 0.001 : 1} max={contentUnit === "kg" ? 2147483.647 : 2147483647} step={contentUnit === "kg" ? 0.001 : 1} className={fieldClass} aria-describedby="net-content-help"/></label>
+                            <label className="text-sm font-semibold text-slate-700">Unidade do conteúdo<select name="net_content_unit" value={contentUnit} onChange={event => {
+                                const unit = event.currentTarget.value;
+                                if (unit === "g" || unit === "kg" || unit === "ml" || unit === "un") setContentUnit(unit);
+                            }} className={fieldClass}><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="un">un</option></select></label>
+                            <p id="net-content-help" className="text-xs text-slate-500 sm:col-span-2">O backend ainda aceita apenas g, ml e un. Valores em kg serão convertidos para gramas ao salvar (1 kg = 1.000 g).</p>
                             <label className="text-sm font-semibold text-slate-700">Tipo de embalagem<input name="packaging_type" required maxLength={200} className={fieldClass}/></label>
                             <label className="text-sm font-semibold text-slate-700">Quantidade por embalagem<input name="packaging_quantity" type="number" required min={1} max={2147483647} step={1} className={fieldClass}/></label>
                         </div>

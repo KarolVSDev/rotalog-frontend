@@ -11,6 +11,7 @@ import {
     OfferComparisonStatus,
 } from "./BuyerOfferComparison";
 import { useOfferComparison } from "./useBuyerOfferComparison";
+import { isPurchasableOffer } from "./buyerCatalog";
 
 type Details = { product: CatalogProduct; offers: Offer[] };
 type LoadState = { key: string; data?: Details; error?: string };
@@ -35,7 +36,7 @@ export function BuyerApiProductDetails() {
         let active = true;
         void Promise.all([repository.product(productId), repository.offers(productId)])
             .then(([product, offers]) => {
-                if (active) setResult({ key: requestKey, data: { product, offers } });
+                if (active) setResult({ key: requestKey, data: { product, offers: offers.filter(isPurchasableOffer) } });
             })
             .catch(reason => {
                 if (active) setResult({ key: requestKey, error: buyerReadError(reason) });
@@ -63,7 +64,11 @@ export function BuyerApiProductDetails() {
     return (
         <div className="mx-auto w-full max-w-[1120px] text-slate-900">
             <Link to="/" className="text-sm font-medium text-blue-700 hover:underline">← Voltar ao catálogo</Link>
-            <header className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            {activeOffers.length === 0 ? (
+                <p className="mt-5 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+                    Produto indisponível para compra: não há ofertas com preço e disponibilidade válidos no momento.
+                </p>
+            ) : <><header className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <span className="inline-flex rounded-md bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
                     {productCategory(data.product.category)}
                 </span>
@@ -76,35 +81,29 @@ export function BuyerApiProductDetails() {
 
             <section className="mt-6" aria-labelledby="product-offers-title">
                 <h2 id="product-offers-title" className="text-lg font-bold">Ofertas dos fornecedores</h2>
-                {activeOffers.length === 0 ? (
-                    <p className="mt-3 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
-                        Não há ofertas ativas para este produto.
-                    </p>
-                ) : (
-                    <ul className="mt-3 grid gap-3">
-                        {activeOffers.map(offer => (
-                            <li key={offer.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                                <OfferComparisonSelector
-                                    offer={offer}
-                                    selected={selectedOfferIds.includes(offer.id)}
-                                    selectedCount={selectedOffers.length}
-                                    activeOfferCount={activeOffers.length}
-                                    onChange={selected => toggleOffer(offer.id, selected)}
-                                />
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div>
-                                        <h3 className="font-semibold">{offer.supplier_name}</h3>
-                                        <p className="mt-1 text-sm text-slate-500">{offer.region}</p>
-                                    </div>
-                                    <p className="text-lg font-bold text-blue-700">{formatMoney(offer.unit_price)}</p>
+                <ul className="mt-3 grid gap-3">
+                    {activeOffers.map(offer => (
+                        <li key={offer.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <OfferComparisonSelector
+                                offer={offer}
+                                selected={selectedOfferIds.includes(offer.id)}
+                                selectedCount={selectedOffers.length}
+                                activeOfferCount={activeOffers.length}
+                                onChange={selected => toggleOffer(offer.id, selected)}
+                            />
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="font-semibold">{offer.supplier_name}</h3>
+                                    <p className="mt-1 text-sm text-slate-500">{offer.region}</p>
                                 </div>
-                                <p className="mt-3 text-xs text-slate-600">
-                                    Pedido mínimo: {offer.minimum_order_quantity} · Quantidade disponível: {offer.available_quantity}
-                                </p>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                                <p className="text-lg font-bold text-blue-700">{formatMoney(offer.unit_price)}</p>
+                            </div>
+                            <p className="mt-3 text-xs text-slate-600">
+                                Pedido mínimo: {offer.minimum_order_quantity} · Quantidade disponível: {offer.available_quantity}
+                            </p>
+                        </li>
+                    ))}
+                </ul>
                 {activeOffers.length === 1 && (
                     <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                         Há apenas uma oferta ativa. A comparação fica disponível quando houver pelo menos duas.
@@ -116,7 +115,7 @@ export function BuyerApiProductDetails() {
                         <OfferComparisonPanel offers={selectedOffers} />
                     </>
                 )}
-            </section>
+            </section></>}
         </div>
     );
 }

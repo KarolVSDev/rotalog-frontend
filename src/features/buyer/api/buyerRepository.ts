@@ -3,6 +3,7 @@ import { ApiError } from "../../../shared/api/http";
 import type { CatalogProduct } from "../../products/api/catalogRepository";
 import type { ApiOrder } from "../../orders/api/contracts";
 import { formatMoney } from "../../orders/api/orderAdapter";
+import { isPurchasableOffer } from "./buyerCatalog";
 
 export type Offer = { id: string; product_id: string; product_name: string; supplier_organization_id: string; supplier_name: string; warehouse_id: string; unit_price: string; currency: "BRL"; minimum_order_quantity: number; available_quantity: number; version: number; is_active: boolean };
 export type Slot = { id: string; warehouse_id: string; starts_at: string; ends_at: string; total_quantity: number; reserved_quantity: number };
@@ -70,7 +71,7 @@ export function validateCart(offers: Offer[], quantities: number[]): void {
     const first = offers[0];
     offers.forEach((offer, index) => {
         if (offer.supplier_organization_id !== first.supplier_organization_id || offer.warehouse_id !== first.warehouse_id) throw new Error("Use somente um fornecedor e um depósito por compra.");
-        if (!offer.is_active || !Number.isSafeInteger(quantities[index]) || quantities[index] > 2_147_483_647 || quantities[index] < offer.minimum_order_quantity || quantities[index] > offer.available_quantity) throw new Error(`Revise quantidade mínima e disponibilidade de ${offer.product_name}.`);
+        if (!isPurchasableOffer(offer) || !Number.isSafeInteger(quantities[index]) || quantities[index] > 2_147_483_647 || quantities[index] < offer.minimum_order_quantity || quantities[index] > offer.available_quantity) throw new Error(`Revise preço, quantidade mínima e disponibilidade de ${offer.product_name}.`);
     });
 }
 export function buyerError(error: unknown): string {
