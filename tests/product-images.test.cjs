@@ -1,0 +1,74 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+const { indexedDB } = require('fake-indexeddb');
+const { webcrypto: crypto } = require('node:crypto');
+const data = new Map();
+let failWrite = false;
+const localStorage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => { if (failWrite) throw new Error('Storage full'); data.set(key, value); } };
+function load(path, dependencies = {}) {
+    const module = { exports: {} };
+    const code = ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+    vm.runInNewContext(code, { module, exports: module.exports, require: id => dependencies[id] ?? require(id), localStorage, indexedDB, crypto, window: { dispatchEvent() {} }, Event: class {} });
+    return module.exports;
+}
+const mocks = load('src/features/products/mocks/products.mock.ts');
+const products = load('src/features/products/services/supplierProducts.service.ts', { '../mocks/products.mock': mocks, '../../inventory/services/stockMovements': load('src/features/inventory/services/stockMovements.ts') });
+const images = load('src/features/products/services/productImages.service.ts');
+const { saveProductWithImage } = load('src/features/products/services/saveProductWithImage.ts', {
+    './supplierProducts.service': products, './productImages.service': images,
+});
+const storage = images.productImageStorage;
+const org = 'fornecedor-001';
+const image = new Blob(['image bytes'], { type: 'image/png' });
+const input = { id: 'IMAGE-001', name: 'Produto', category: 'Categoria', unit: 'kg', price: 4, stock: 10 };
+const read = () => products.getSupplierProducts(org).find(item => item.id === input.id);
+async function run() {
+    const legacy = JSON.stringify(products.getSupplierProducts(org));
+    assert.throws(() => images.validateProductImage(new Blob(['a'], { type: 'image/svg+xml' })));
+    assert.throws(() => images.validateProductImage(new Blob([new Uint8Array(2 * 1024 * 1024 + 1)], { type: 'image/png' })));
+    assert.throws(() => images.validateProductImage(new Blob([], { type: 'image/png' })));
+    for (const type of ['image/png', 'image/jpeg', 'image/webp']) images.validateProductImage(new Blob(['a'], { type }));
+    images.validateProductImage(new Blob([new Uint8Array(2 * 1024 * 1024)], { type: 'image/png' }));
+    await saveProductWithImage({ organizationId: org, input, image });
+    const first = read();
+    assert.match(first.imageRef, /^product-image:[a-f0-9]{32}$/);
+    assert.equal(await (await storage.get(org, first.imageRef)).text(), 'image bytes');
+    assert.equal(await storage.get('fornecedor-002', first.imageRef), undefined);
+    await storage.remove('fornecedor-002', first.imageRef);
+    assert.ok(await storage.get(org, first.imageRef));
+    assert.ok(!data.get('rotalog:supplier-products:v1:' + org).includes('data:image'));
+    assert.equal(JSON.stringify(products.getSupplierProducts(org).filter(p => p.id !== input.id)), legacy);
+    await saveProductWithImage({ organizationId: org, product: first, input, image: undefined });
+    assert.equal(read().imageRef, first.imageRef);
+    await saveProductWithImage({ organizationId: org, product: read(), input, image });
+    const second = read();
+    assert.notEqual(first.imageRef, second.imageRef);
+    assert.equal(await storage.get(org, first.imageRef), undefined);
+    assert.ok(await storage.get(org, second.imageRef));
+    const before = data.get('rotalog:supplier-products:v1:' + org);
+    await assert.rejects(() => saveProductWithImage({ organizationId: org, product: second, input, image }, { ...storage, put: async () => { throw new Error('Quota'); } }));
+    assert.equal(data.get('rotalog:supplier-products:v1:' + org), before);
+    let temporary;
+    failWrite = true;
+    await assert.rejects(() => saveProductWithImage({ organizationId: org, product: second, input, image }, { ...storage, put: async (...args) => { temporary = await storage.put(...args); return temporary; } }));
+    failWrite = false;
+    assert.equal(await storage.get(org, temporary), undefined, 'roll back new file on catalog write failure');
+    assert.ok(await storage.get(org, second.imageRef), 'preserve old file on failure');
+    assert.equal(data.get('rotalog:supplier-products:v1:' + org), before);
+    await assert.rejects(() => saveProductWithImage({ organizationId: 'fornecedor-002', product: second, input, image }));
+    await assert.rejects(() => saveProductWithImage({ organizationId: org, product: first, input, image }), /outra operação/);
+    await saveProductWithImage({ organizationId: org, product: read(), input, image: null });
+    assert.equal(read().imageRef, undefined);
+    assert.equal(await storage.get(org, second.imageRef), undefined);
+    assert.equal(read().stock, input.stock);
+    await saveProductWithImage({ organizationId: org, product: read(), input, image });
+    const previous = read();
+    const result = await saveProductWithImage({ organizationId: org, product: previous, input, image: null }, { ...storage, remove: async () => { throw new Error('Unavailable'); } });
+    assert.ok(result.warning, 'cleanup failure is reported without invalidating saved product');
+    assert.equal(read().imageRef, undefined);
+    await storage.remove(org, previous.imageRef);
+    console.log('Imagens: formatos/tamanho, persistência Blob, isolamento, preservação, substituição, remoção, rollback e falhas de armazenamento OK');
+}
+run().catch(error => { console.error(error); process.exitCode = 1; });

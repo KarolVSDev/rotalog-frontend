@@ -1,4 +1,6 @@
 
+import type { StockMovement } from "../../inventory/models/stockMovement";
+
 export type ProductAvailability =
     | "Disponível"
     | "Estoque baixo"
@@ -12,6 +14,8 @@ export type SupplierProduct = {
     unit: string;
     price: number;
     stock: number;
+    imageRef?: string;
+    stockMovements?: StockMovement[];
     availability: ProductAvailability;
 };
 

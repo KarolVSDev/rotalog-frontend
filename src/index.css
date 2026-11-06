@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/supplier.css";
 
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -34,4 +35,10 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* No portal do fornecedor, preserva os tamanhos e pesos das utilities Tailwind.
+   O reset global sem layer acima prevaleceria sobre text-sm/text-xs. */
+:where([data-supplier-ui]) :is(button, input, select, textarea) {
+  font: revert-layer;
 }

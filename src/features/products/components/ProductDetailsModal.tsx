@@ -2,6 +2,9 @@
 import { useEffect, useRef } from "react";
 
 import type { Organization } from "../../organizations/mocks/organizations.mock";
+import { ProductImage } from "./ProductImage";
+import { createPortal } from "react-dom";
+import { useModalBackground } from "../../../shared/hooks/useModalBackground";
 
 import type {
     SupplierProduct,
@@ -34,6 +37,8 @@ export function ProductDetailsModal({
     onClose,
 }: ProductDetailsModalProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
+    useModalBackground(overlayRef);
     const closeButtonRef = useRef<HTMLButtonElement>(null);
     const onCloseRef = useRef(onClose);
 
@@ -123,8 +128,10 @@ export function ProductDetailsModal({
         return null;
     }
 
-    return (
+    return createPortal(
         <div
+            ref={overlayRef}
+            data-supplier-ui
             className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) {
@@ -137,13 +144,12 @@ export function ProductDetailsModal({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="product-details-title"
-                aria-describedby="product-details-description"
                 tabIndex={-1}
-                className="flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                className="flex max-h-[calc(100dvh_-_2rem)] w-full min-w-0 max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl [overflow-wrap:anywhere]"
             >
                 {/* Cabeçalho */}
                 <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-6">
-                    <div>
+                    <div className="min-w-0">
                         <p className="text-sm font-medium text-slate-500">
                             Detalhes do produto
                         </p>
@@ -165,14 +171,15 @@ export function ProductDetailsModal({
                         type="button"
                         onClick={onClose}
                         aria-label="Fechar detalhes do produto"
-                        className="rounded-lg px-3 py-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                        className="shrink-0 rounded-lg px-3 py-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                     >
                         ✕
                     </button>
                 </div>
 
                 {/* Conteúdo */}
-                <div className="space-y-6 overflow-y-auto p-6">
+                <div role="region" aria-label="Conteúdo dos detalhes do produto" tabIndex={0} className="min-h-0 space-y-6 overflow-y-auto p-6 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600">
+                    <ProductImage organizationId={activeOrganization.id} imageRef={product.imageRef} name={product.name} className="h-40 w-full" />
                     <div>
                         <p className="mb-2 text-sm text-slate-500">
                             Disponibilidade
@@ -234,13 +241,6 @@ export function ProductDetailsModal({
                         </p>
                     </div>
 
-                    <p
-                        id="product-details-description"
-                        className="text-xs text-slate-500"
-                    >
-                        Informações demonstrativas. Os dados completos
-                        serão integrados à API do RotaLog.
-                    </p>
                 </div>
 
                 {/* Rodapé */}
@@ -254,6 +254,6 @@ export function ProductDetailsModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>, document.body
     );
 }

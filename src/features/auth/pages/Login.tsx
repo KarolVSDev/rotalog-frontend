@@ -4,11 +4,20 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 export function Login() {
-    const { login } = useAuth();
+    const { login, sessionError, sessionNotice, isLoading } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const locationState = location.state as {
+        from?: unknown;
+        registrationEmail?: unknown;
+        registrationNotice?: unknown;
+    } | null;
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [email, setEmail] = useState("");
+    const [email, setEmail] = useState(
+        typeof locationState?.registrationEmail === "string"
+            ? locationState.registrationEmail
+            : ""
+    );
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
@@ -30,12 +39,13 @@ export function Login() {
         try {
             const user = await login({ email, password });
 
-            const requestedPath = (
-                location.state as { from?: unknown } | null
-            )?.from;
+            const requestedPath = locationState?.from;
 
-            const defaultPath =
-                user.role === "BUYER_ADMIN" ? "/" : "/fornecedor";
+            const defaultPath = user.role === "ROTALOG_ADMIN"
+                ? "/admin"
+                : user.role === "BUYER_ADMIN"
+                    ? user.capabilities?.includes("catalog:read") ? "/" : "/comprador/compras"
+                    : "/fornecedor";
 
             const destination =
                 typeof requestedPath === "string" &&
@@ -45,9 +55,20 @@ export function Login() {
                 !requestedPath.includes("\\") &&
                 !requestedPath.includes("://") &&
                 !["/login", "/cadastro"].includes(requestedPath) &&
-                (user.role === "BUYER_ADMIN"
-                    ? requestedPath.startsWith("/produto/") ||
-                      requestedPath.startsWith("/comprador")
+                (user.role === "ROTALOG_ADMIN"
+                    ? requestedPath === "/admin" || requestedPath.startsWith("/admin/")
+                    : user.role === "BUYER_ADMIN"
+                    ? requestedPath.startsWith("/produto/")
+                        ? user.capabilities?.includes("catalog:read")
+                        : requestedPath.startsWith("/comprador/compras")
+                            ? user.capabilities?.includes("purchase:read")
+                            : requestedPath.startsWith("/comprador/carrinho")
+                                ? user.capabilities?.includes("checkout:create")
+                                : requestedPath.startsWith("/comprador")
+                                    ? user.capabilities?.includes("catalog:read") || user.capabilities?.includes("purchase:read")
+                                    : requestedPath === "/"
+                                        ? user.capabilities?.includes("catalog:read") || user.capabilities?.includes("purchase:read")
+                                        : false
                     : requestedPath.startsWith("/fornecedor"))
                     ? requestedPath
                     : defaultPath;
@@ -107,6 +128,12 @@ export function Login() {
                         <p className="mt-2 text-sm text-slate-500">
                             Faça login para continuar
                         </p>
+                        {sessionNotice && <p role="status" className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">{sessionNotice}</p>}
+                        {typeof locationState?.registrationNotice === "string" && (
+                            <p role="status" className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+                                {locationState.registrationNotice}
+                            </p>
+                        )}
 
                         <form
                             onSubmit={handleSubmit}
@@ -195,18 +222,18 @@ export function Login() {
                                 Lembrar de mim
                             </label>
 
-                            {message && (
+                            {(message || sessionError) && (
                                 <p
                                     role="status"
                                     className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700"
                                 >
-                                    {message}
+                                    {message || sessionError}
                                 </p>
                             )}
 
                             <button
                                 type="submit"
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isLoading}
                                 className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 {isSubmitting ? "Entrando..." : "Entrar"}

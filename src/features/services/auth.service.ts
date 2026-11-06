@@ -1,11 +1,14 @@
 
-export type UserRole = "BUYER_ADMIN" | "SUPPLIER_OPERATOR";
+export type UserRole = "BUYER_ADMIN" | "SUPPLIER_OPERATOR" | "DRIVER" | "ROTALOG_ADMIN";
 
 export type AuthUser = {
     id: string;
     name: string;
     email: string;
     role: UserRole;
+    organization_id?: string;
+    organizations?: { id: string; name: string; role: UserRole }[];
+    capabilities?: string[];
 };
 
 export type LoginCredentials = {
