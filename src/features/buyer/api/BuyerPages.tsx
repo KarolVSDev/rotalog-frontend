@@ -11,7 +11,7 @@ import { useBuyer, type Attempt } from "./buyerContext";
 import { BuyerRepository, buyerError, creationRejected, money, validateCart, type Checkout, type Offer, type Purchase, type Slot } from "./buyerRepository";
 import { BuyerEmptyState, BuyerIcon, BuyerStatus } from "../components/BuyerVisuals";
 import { ProductCategoryFilter } from "../../../shared/components/ProductCategoryFilter";
-import { ProductImage } from "../../../shared/components/ProductImage";
+import { AuthenticatedProductImage as ProductImage } from "../../../shared/components/AuthenticatedProductImage";
 import { authMode } from "../../../shared/api/config";
 import { DemoDataBadge } from "../components/DemoDataBadge";
 import { areSyntheticRecords, isSyntheticRecord } from "../components/demoData";
@@ -21,6 +21,8 @@ import {
     OfferComparisonStatus,
 } from "./BuyerOfferComparison";
 import { useOfferComparison } from "./useBuyerOfferComparison";
+import { isPurchasableOffer } from "./buyerCatalog";
+import { BuyerReadRepository } from "./BuyerReadRepository";
 
 const button = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600";
 const secondaryButton = "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600";
@@ -152,12 +154,11 @@ function CatalogContent() {
     const [page,setPage]=useState(1);
     const [query,setQuery]=useState(search);
     const [category,setCategory]=useState("");
-    const repository=useRepository();
-    const products=useMemo(()=>new CatalogRepository(user!.organization_id!),[user]);
+    const repository=useMemo(()=>new BuyerReadRepository(user!.organization_id!),[user]);
     // A search change resets pagination before issuing the next query.
     const actualPage=query===search?page:1;
-    const result=useRead(async()=>({products:await products.list(actualPage,search),offers:await repository.offers()}),[repository,user?.organization_id,actualPage,search]);
-    const publishedProducts = result.value?.products.items.filter(product => product.publication_state === "PUBLISHED") ?? [];
+    const result=useRead(()=>repository.availableCatalog(search,actualPage),[repository,user?.organization_id,actualPage,search]);
+    const publishedProducts = result.value?.products.items ?? [];
     const categories = catalogCategories(publishedProducts);
     const activeCategory = categories.includes(category) ? category : "";
     const visibleProducts = publishedProducts.filter(product => !activeCategory || product.category === activeCategory);
@@ -186,12 +187,12 @@ function CatalogContent() {
                 <ProductCategoryFilter categories={categories} value={activeCategory} onChange={setCategory} label="Categoria nesta página"/>
             </div>
             {visibleProducts.length ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleProducts.map(product=>{
-                const offers=result.value!.offers.filter(offer=>offer.product_id===product.id && offer.is_active && offer.available_quantity>=offer.minimum_order_quantity);
+                const offers=result.value!.offers.filter(offer=>offer.product_id===product.id && isPurchasableOffer(offer));
                 const cheapest=offers.reduce<Offer|undefined>((best,offer)=>!best||cents(offer.unit_price)<cents(best.unit_price)?offer:best,undefined);
                 const productUnit = product.packaging_type.trim();
                 const details = `${product.packaging_quantity} ${product.packaging_quantity === 1 ? "unidade" : "unidades"}${productUnit ? ` por ${productUnit.toLocaleLowerCase("pt-BR")}` : ""}`;
                 return <article className="group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-5" key={product.id}>
-                    <ProductImage name={product.name}/>
+                    <ProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name}/>
                     <div className="mt-4 flex min-h-7 flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="max-w-[65%] truncate text-xs font-medium text-slate-500">{product.brand || "Produto"}</span>
@@ -206,8 +207,8 @@ function CatalogContent() {
                         <Link className={`${button} mt-5 w-full`} to={`/produto/${encodeURIComponent(product.id)}`}>Ver produto<BuyerIcon name="arrow-right" className="h-4 w-4"/></Link>
                     </div>
                 </article>;
-            })}</div> : publishedProducts.length ? <BuyerEmptyState icon="search" title="Nenhum produto nesta categoria"><p>Escolha outra categoria para ver os produtos desta página.</p></BuyerEmptyState> : <BuyerEmptyState icon="search" title="Nenhum produto publicado encontrado"><p>Revise sua busca ou tente novamente mais tarde.</p></BuyerEmptyState>}
-            <Pager page={actualPage} size={25} total={result.value?.products.total??0} onChange={next=>{setCategory("");setQuery(search);setPage(next);}}/>
+            })}</div> : publishedProducts.length ? <BuyerEmptyState icon="search" title="Nenhum produto nesta categoria"><p>Escolha outra categoria para ver os produtos desta página.</p></BuyerEmptyState> : <BuyerEmptyState icon="search" title="Nenhum produto disponível para compra"><p>{search.trim() ? "Nenhum produto com oferta disponível corresponde à busca." : "Não há produtos publicados com ofertas disponíveis no momento."}</p></BuyerEmptyState>}
+            <Pager page={result.value?.products.page??actualPage} size={25} total={result.value?.products.total??0} onChange={next=>{setCategory("");setQuery(search);setPage(next);}}/>
         </Result>
     </div>;
 }
@@ -215,7 +216,7 @@ export function ApiBuyerProductDetails() {
     const {productId=""}=useParams();
     const {user}=useAuth();
     const repository=useRepository();
-    const result=useRead(async()=>({product:await new CatalogRepository(user!.organization_id!).detail(productId),offers:await repository.offers(productId)}),[repository,productId]);
+    const result=useRead(async()=>({product:await new CatalogRepository(user!.organization_id!).detail(productId),offers:(await repository.offers(productId)).filter(isPurchasableOffer)}),[repository,productId]);
     const {activeOffers,selectedOfferIds,selectedOffers,toggleOffer}=useOfferComparison(result.value?.offers??[],productId??"");
     const demoDataVisible = authMode === "api" &&
         !!result.value &&
@@ -228,7 +229,8 @@ export function ApiBuyerProductDetails() {
         </div>
         <div>
             <Result {...result}>
-                {result.value&&<>
+                {result.value&&result.value.offers.length===0&&<BuyerEmptyState icon="store" title="Produto indisponível para compra"><p>Este produto não possui ofertas com preço e disponibilidade válidos no momento.</p></BuyerEmptyState>}
+                {result.value&&result.value.offers.length>0&&<>
                     <ProductInformation product={result.value.product}/>
                     <section className="mt-5" aria-labelledby="buyer-product-offers-title">
                         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
@@ -237,26 +239,24 @@ export function ApiBuyerProductDetails() {
                                 <p className="mt-1 text-sm text-slate-500">Preço por unidade comercial e quantidade informados pelo fornecedor.</p>
                             </div>
                         </div>
-                        {activeOffers.length ? <>
-                            <div className="grid gap-4 lg:grid-cols-2">
-                                {activeOffers.map(offer=><OfferCard
-                                    key={offer.id}
-                                    offer={offer}
-                                    packagingType={result.value!.product.packaging_type}
-                                    selected={selectedOfferIds.includes(offer.id)}
-                                    selectedCount={selectedOffers.length}
-                                    activeOfferCount={activeOffers.length}
-                                    onCompare={selected=>toggleOffer(offer.id,selected)}
-                                />)}
-                            </div>
-                            {activeOffers.length === 1 && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                Há apenas uma oferta ativa. A comparação fica disponível quando houver pelo menos duas.
-                            </p>}
-                            {activeOffers.length >= 2 && <>
-                                <OfferComparisonStatus selectedCount={selectedOffers.length}/>
-                                <OfferComparisonPanel offers={selectedOffers}/>
-                            </>}
-                        </> : <BuyerEmptyState icon="store" title="Nenhuma oferta disponível"><p>Este produto ainda não possui ofertas ativas.</p></BuyerEmptyState>}
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            {activeOffers.map(offer=><OfferCard
+                                key={offer.id}
+                                offer={offer}
+                                packagingType={result.value!.product.packaging_type}
+                                selected={selectedOfferIds.includes(offer.id)}
+                                selectedCount={selectedOffers.length}
+                                activeOfferCount={activeOffers.length}
+                                onCompare={selected=>toggleOffer(offer.id,selected)}
+                            />)}
+                        </div>
+                        {activeOffers.length === 1 && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            Há apenas uma oferta ativa. A comparação fica disponível quando houver pelo menos duas.
+                        </p>}
+                        {activeOffers.length >= 2 && <>
+                            <OfferComparisonStatus selectedCount={selectedOffers.length}/>
+                            <OfferComparisonPanel offers={selectedOffers}/>
+                        </>}
                     </section>
                 </>}
             </Result>
@@ -264,7 +264,7 @@ export function ApiBuyerProductDetails() {
     </div>;
 }
 function ProductInformation({product}:{product:CatalogProduct}) {
-    return <section className={`${card} grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center`}><ProductImage name={product.name} className="h-40 w-full sm:h-44"/><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{product.brand || "Produto"}</p><h1 className="mt-2 text-2xl font-bold text-blue-950">{product.name}</h1><p className="mt-2 text-sm text-slate-600">{product.packaging_type} · {product.packaging_quantity} unidades</p><details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-blue-700">Detalhes do produto</summary><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">{Object.entries({"Conteúdo":`${product.net_content} ${product.net_content_unit}`,"GTIN":product.gtin??"Não informado","Peso bruto":`${product.gross_weight_grams} g`,"Volume":`${product.volume_cm3} cm³`,...product.variant_attributes}).map(([key,value])=><div key={key}><dt className="font-semibold">{key}</dt><dd className="text-slate-600">{String(value)}</dd></div>)}</dl></details></div></section>;
+    return <section className={`${card} grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center`}><ProductImage lazy={false} productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name} className="h-40 w-full sm:h-44"/><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{product.brand || "Produto"}</p><h1 className="mt-2 text-2xl font-bold text-blue-950">{product.name}</h1><p className="mt-2 text-sm text-slate-600">{product.packaging_type} · {product.packaging_quantity} unidades</p><details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-blue-700">Detalhes do produto</summary><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">{Object.entries({"Conteúdo":`${product.net_content} ${product.net_content_unit}`,"GTIN":product.gtin??"Não informado","Peso bruto":`${product.gross_weight_grams} g`,"Volume":`${product.volume_cm3} cm³`,...product.variant_attributes}).map(([key,value])=><div key={key}><dt className="font-semibold">{key}</dt><dd className="text-slate-600">{String(value)}</dd></div>)}</dl></details></div></section>;
 }
 function OfferCard({
     offer,
@@ -291,7 +291,7 @@ function OfferCard({
     function add(replaceOrigin=false) {
         try{cart.add(offer,quantity,replaceOrigin);setMessage("Oferta adicionada ao carrinho.");setError("");setReplace(false);}catch(reason){setError(buyerError(reason));}
     }
-    const available = offer.available_quantity >= offer.minimum_order_quantity;
+    const available = isPurchasableOffer(offer);
     return <article className={`${card} flex min-w-0 flex-col`}>
         <OfferComparisonSelector offer={offer} selected={selected} selectedCount={selectedCount} activeOfferCount={activeOfferCount} onChange={onCompare}/>
         <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><BuyerIcon name="store" className="h-5 w-5"/></span><div><p className="text-xs font-medium text-slate-500">Fornecedor</p><h3 className="font-bold text-slate-900">{offer.supplier_name}</h3></div></div><BuyerStatus tone={available?"success":"warning"} icon={available?"check":"clock"}>{available?"Disponível":"Indisponível"}</BuyerStatus></div>

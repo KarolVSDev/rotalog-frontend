@@ -1,3 +1,4 @@
+import { AuthenticatedProductImage } from "../../../shared/components/AuthenticatedProductImage";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { cents, formatMoney } from "../../orders/api/orderAdapter";
@@ -5,6 +6,7 @@ import { useAuth } from "../../auth/hooks/useAuth";
 import { productCategory, type CatalogProduct } from "../../products/api/catalogRepository";
 import type { Offer } from "../../products/api/offersRepository";
 import { BuyerReadRepository, buyerReadError } from "./BuyerReadRepository";
+import { availableBuyerProducts, isPurchasableOffer } from "./buyerCatalog";
 
 type MarketplaceContext = { search: string };
 type CatalogData = { products: CatalogProduct[]; offers: Offer[] };
@@ -44,15 +46,9 @@ export function BuyerApiCatalog() {
     const data = result.key === requestKey ? result.data : undefined;
     const error = result.key === requestKey ? result.error ?? "" : "";
 
-    const filteredProducts = useMemo(() => {
+    const filteredCatalog = useMemo(() => {
         if (!data) return [];
-        const term = search.trim().toLocaleLowerCase("pt-BR");
-        return data.products.filter(product => {
-            const productOffers = data.offers.filter(offer => offer.product_id === product.id);
-            return !term ||
-                [product.name, product.brand, product.category, ...productOffers.map(offer => offer.supplier_name)]
-                    .some(value => value.toLocaleLowerCase("pt-BR").includes(term));
-        });
+        return availableBuyerProducts(data.products, data.offers, search);
     }, [data, search]);
 
     if (loading) {
@@ -86,21 +82,23 @@ export function BuyerApiCatalog() {
                         <h2 id="buyer-products-title" className="text-lg font-bold">Catálogo de produtos</h2>
                         <p className="mt-1 text-xs text-slate-500">Preços e condições vêm das ofertas ativas retornadas pelo Backend.</p>
                     </div>
-                    <span className="text-xs font-medium text-slate-500">{filteredProducts.length} produto(s)</span>
+                    <span className="text-xs font-medium text-slate-500">{filteredCatalog.length} produto(s)</span>
                 </div>
 
-                {filteredProducts.length === 0 ? (
+                {filteredCatalog.length === 0 ? (
                     <div className={`${card} mt-4 text-center`}>
                         <h3 className="font-semibold">Nenhum produto encontrado</h3>
                         <p className="mt-2 text-sm text-slate-500">
-                            {data?.products.length ? "Tente outro termo de busca." : "Não há produtos publicados disponíveis para esta organização."}
+                            {data?.products.some(product => product.publication_state === "PUBLISHED")
+                                ? "Tente outro termo de busca ou consulte novamente mais tarde."
+                                : "Não há produtos publicados disponíveis para esta organização."}
                         </p>
                     </div>
                 ) : (
                     <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        {filteredProducts.map(product => {
+                        {filteredCatalog.map(product => {
                             const activeOffers = data?.offers.filter(offer =>
-                                offer.product_id === product.id && offer.is_active,
+                                offer.product_id === product.id && isPurchasableOffer(offer),
                             ) ?? [];
                             const lowestPrice = activeOffers.reduce<Offer | undefined>(
                                 (lowest, offer) =>
@@ -111,6 +109,7 @@ export function BuyerApiCatalog() {
                             );
                             return (
                                 <article key={product.id} className={`${card} flex min-w-0 flex-col`}>
+                                    <AuthenticatedProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary) ?? lowestPrice?.product_image} name={product.name} className="mb-4 h-36 w-full"/>
                                     <span className="w-fit rounded-md bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700">
                                         {productCategory(product.category)}
                                     </span>

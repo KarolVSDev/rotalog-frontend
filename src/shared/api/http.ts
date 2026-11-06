@@ -14,11 +14,12 @@ export class ApiError extends Error {
     }
 }
 
-export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}, responseType: "json" | "blob" = "json"): Promise<T> {
     let response: Response;
     try {
         response = await fetch(`${apiUrl}${path}`, { ...options, credentials: "include", cache: "no-store" });
-    } catch {
+    } catch (error) {
+        if (options.signal?.aborted) throw error;
         throw new Error("Não foi possível conectar ao Backend. Verifique sua conexão.");
     }
     if (!response.ok) {
@@ -35,5 +36,19 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
         } catch { /* Non-JSON errors still preserve their HTTP status. */ }
         throw new ApiError(response.status, metadata);
     }
+    if (responseType === "blob") {
+        const mime = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+        if (mime !== "image/png" && mime !== "image/jpeg") throw new Error("Formato de imagem não autorizado.");
+        return response.blob() as Promise<T>;
+    }
     return response.status === 204 ? undefined as T : response.json() as Promise<T>;
+}
+
+export function assertProductImagePath(path: string): void {
+    const uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+    if (!new RegExp(`^/api/v1/products/${uuid}/images/${uuid}/content$`).test(path)) throw new Error("Caminho de imagem não autorizado.");
+}
+export function requestBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+    assertProductImagePath(path);
+    return request<Blob>(path, { ...options, method: "GET", redirect: "error" }, "blob");
 }
