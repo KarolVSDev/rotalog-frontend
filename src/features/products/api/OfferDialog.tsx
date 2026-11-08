@@ -2,19 +2,24 @@ import {useEffect, useId, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {CatalogRepository, catalogError, type CatalogPage, type CatalogProduct} from "./catalogRepository";
 import {eligibleWarehouse, minimumQuantity, offerPrice, type Offer, type Warehouse} from "./offersRepository";
+import {initialStockValues} from "../../inventory/api/inventoryRepository";
 
 export type OfferSelection = {kind:"create";product?:CatalogProduct} | {kind:"edit" | "pause"; offer:Offer};
-export type OfferCommand = {product:CatalogProduct | null; warehouse:Warehouse | null; price:string; quantity:string};
+export type OfferCommand = {product:CatalogProduct | null; warehouse:Warehouse | null; price:string; quantity:string; initialStock:string; safetyStock:string};
 const field = "mt-1 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
 const button = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-50";
-export function OfferDialog({selection, organizationId, warehouses, pending, error, failed, onClose, onConfirm}: {
+export function OfferDialog({selection, organizationId, warehouses, pending, error, failed, initialStockPartial = false, initialStockError, onClose, onConfirm, onRetryInitialStock}: {
     selection:OfferSelection; organizationId:string; warehouses:Warehouse[]; pending:boolean;
-    error:string | null; failed:boolean; onClose:()=>void; onConfirm:(command:OfferCommand)=>Promise<void>;
+    error:string | null; failed:boolean; initialStockPartial?:boolean; initialStockError?:string | null;
+    onClose:()=>void; onConfirm:(command:OfferCommand)=>Promise<void>;
+    onRetryInitialStock?:(sellable:string,safety:string)=>Promise<void>;
 }) {
     const dialog = useRef<HTMLDialogElement>(null);
     const titleId = useId();
     const [price, setPrice] = useState(selection.kind === "create" ? "" : selection.offer.unit_price);
     const [quantity, setQuantity] = useState(selection.kind === "create" ? "1" : String(selection.offer.minimum_order_quantity));
+    const [initialStock, setInitialStock] = useState("0");
+    const [safetyStock, setSafetyStock] = useState("0");
     const [product, setProduct] = useState<CatalogProduct | null>(selection.kind==="create"?selection.product??null:null);
     const [warehouseId, setWarehouseId] = useState("");
     const [search, setSearch] = useState("");
@@ -45,10 +50,20 @@ export function OfferDialog({selection, organizationId, warehouses, pending, err
         setValidation(null);
         try {
             offerPrice(price); minimumQuantity(quantity);
+            if (selection.kind === "create") {
+                initialStockValues(initialStock,safetyStock);
+            }
             if (selection.kind === "create" && (!product || !warehouse)) throw new Error("Selecione produto publicado e depósito elegível.");
             if (product && product.publication_state !== "PUBLISHED") throw new Error("O produto selecionado não está publicado.");
             setReview(true);
         } catch (failure) {setValidation(failure instanceof Error ? failure.message : "Revise os dados.");}
+    }
+    async function retryStock() {
+        setValidation(null);
+        try {
+            initialStockValues(initialStock,safetyStock);
+            await onRetryInitialStock?.(initialStock,safetyStock);
+        } catch (failure) {setValidation(failure instanceof Error ? failure.message : "Revise as quantidades de estoque.");}
     }
     async function chooseProduct(id:string) {
         if (!id) {setProduct(null);return;}
@@ -61,9 +76,10 @@ export function OfferDialog({selection, organizationId, warehouses, pending, err
         finally {setChecking(false);}
     }
     const title = selection.kind === "create" ? "Criar oferta" : selection.kind === "edit" ? "Alterar oferta" : "Pausar oferta";
-    return createPortal(<dialog ref={dialog} data-supplier-ui aria-labelledby={titleId} onCancel={event=>{event.preventDefault();if (!busy) onClose();}} className="fixed inset-0 m-auto max-h-[calc(100dvh_-_1.5rem)] w-[calc(100%_-_1.5rem)] max-w-3xl overflow-y-auto rounded-2xl border-0 bg-white p-5 text-slate-900 shadow-xl [overflow-wrap:anywhere] backdrop:bg-slate-950/60">
-        <header className="flex items-start justify-between gap-3"><h2 id={titleId} className="text-xl font-semibold">{title}</h2><button type="button" disabled={busy} onClick={onClose} className={button}>Fechar</button></header>
-        {(validation || error) && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{validation ?? error}</p>}
+    return createPortal(<dialog ref={dialog} data-supplier-ui aria-labelledby={titleId} onCancel={event=>{event.preventDefault();if (!busy&&!initialStockPartial) onClose();}} className="fixed inset-0 m-auto max-h-[calc(100dvh_-_1.5rem)] w-[calc(100%_-_1.5rem)] max-w-3xl overflow-y-auto rounded-2xl border-0 bg-white p-5 text-slate-900 shadow-xl [overflow-wrap:anywhere] backdrop:bg-slate-950/60">
+        <header className="flex items-start justify-between gap-3"><h2 id={titleId} className="text-xl font-semibold">{title}</h2><button type="button" disabled={busy||initialStockPartial} onClick={onClose} className={button}>Fechar</button></header>
+        {(validation || error || initialStockError) && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{validation ?? initialStockError ?? error}</p>}
+        {initialStockPartial && <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">A oferta já foi criada. Conclua o estoque abaixo; esta ação não criará outra oferta.</p>}
         {failed && <p className="mt-2 text-sm text-slate-600">Feche esta revisão e atualize as ofertas e os depósitos antes de iniciar outra tentativa. Nenhuma operação será repetida automaticamente.</p>}
         {!review && <fieldset disabled={busy || failed} className="mt-4 space-y-4">
             {selection.kind === "create" && <>
@@ -75,16 +91,31 @@ export function OfferDialog({selection, organizationId, warehouses, pending, err
                 {!eligible.length && <p className="text-sm text-amber-800">Nenhum depósito elegível. Para receber ofertas, o depósito precisa estar ativo e com o endereço confirmado.</p>}
             </>}
             {selection.kind === "edit" && <p className="font-medium">{selection.offer.product_name}</p>}
-            <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm">Preço unitário (R$)<input inputMode="decimal" value={price} maxLength={16} onChange={event=>setPrice(event.target.value)} placeholder="0,00" className={field}/></label><label className="text-sm">Quantidade mínima de pedido<input inputMode="numeric" value={quantity} maxLength={10} onChange={event=>setQuantity(event.target.value)} className={field}/></label></div>
+            <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm">Preço unitário (R$)<input inputMode="decimal" value={price} maxLength={16} onChange={event=>setPrice(event.target.value)} placeholder="0,00" className={field}/></label><label className="text-sm">Quantidade mínima de pedido<input inputMode="numeric" value={quantity} maxLength={10} onChange={event=>setQuantity(event.target.value)} className={field}/></label>
+                {selection.kind === "create" && <>
+                    <label className="text-sm">Quantidade inicial em estoque<input aria-label="Quantidade inicial em estoque" inputMode="numeric" value={initialStock} maxLength={10} onChange={event=>setInitialStock(event.target.value)} className={field}/></label>
+                    <label className="text-sm">Estoque de segurança<input aria-label="Estoque de segurança" inputMode="numeric" value={safetyStock} maxLength={10} onChange={event=>setSafetyStock(event.target.value)} className={field}/></label>
+                </>}
+            </div>
             <p className="text-xs text-slate-500">Preço em reais, sem separador de milhar e com até duas casas decimais. Quantidade mínima inteira, de pelo menos 1.</p>
-            <button type="button" onClick={()=>void prepare()} className={button}>Revisar oferta</button>
+            {selection.kind === "create" && <p className="text-xs text-slate-500">Quantidades inteiras entre 0 e 2.147.483.647. O estoque inicial será registrado como ajuste manual.</p>}
+            <button type="button" onClick={()=>void prepare()} className={button}>{initialStockPartial ? "Revisar estoque inicial" : "Revisar oferta"}</button>
         </fieldset>}
         {review && <section aria-label="Revisão da oferta" className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4 text-sm"><h3 className="font-semibold">{selection.kind === "pause" ? "Confirmar pausa" : "Confira antes de confirmar"}</h3><p className="font-medium">{selection.kind === "create" ? product?.name : selection.offer.product_name}</p>
             {selection.kind === "create" && <p>Depósito: {warehouse?.name} · {warehouse?.address}</p>}
             {selection.kind !== "pause" && <><p>Preço unitário: R$ {offerPrice(price).replace(".", ",")}</p><p>Quantidade mínima: {minimumQuantity(quantity)}</p></>}
+            {selection.kind === "create" && <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm">Quantidade inicial em estoque<input aria-label="Revisar quantidade inicial em estoque" inputMode="numeric" value={initialStock} maxLength={10} onChange={event=>setInitialStock(event.target.value)} className={field}/></label>
+                <label className="text-sm">Estoque de segurança<input aria-label="Revisar estoque de segurança" inputMode="numeric" value={safetyStock} maxLength={10} onChange={event=>setSafetyStock(event.target.value)} className={field}/></label>
+            </div>}
+            {selection.kind === "create" && <p className="text-xs text-slate-500">Justificativa registrada: estoque inicial informado na criação da oferta.</p>}
             {selection.kind === "pause" && <p>A oferta deixará de aparecer na lista de ofertas ativas. A reativação não está disponível no momento.</p>}
-            <div className="flex flex-wrap gap-2">{selection.kind !== "pause" && <button type="button" disabled={busy || failed} className={button} onClick={()=>setReview(false)}>Voltar</button>}<button type="button" disabled={busy || failed} aria-busy={pending} onClick={()=>void onConfirm({product,warehouse,price,quantity})} className={`rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 ${selection.kind === "pause" ? "supplier-action--warning" : "supplier-action--success"}`}>{pending ? "Processando…" : selection.kind === "create" ? "Confirmar criação" : selection.kind === "edit" ? "Confirmar alteração" : "Confirmar pausa"}</button></div>
+            <div className="flex flex-wrap gap-2">{selection.kind !== "pause" && !initialStockPartial && <button type="button" disabled={busy || failed} className={button} onClick={()=>setReview(false)}>Voltar</button>}
+                {initialStockPartial
+                    ? <button type="button" disabled={busy || failed} aria-busy={pending} onClick={()=>void retryStock()} className="supplier-action--success rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{pending?"Registrando estoque…":"Registrar ou conferir estoque"}</button>
+                    : <button type="button" disabled={busy || failed} aria-busy={pending} onClick={()=>void onConfirm({product,warehouse,price,quantity,initialStock,safetyStock})} className={`rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 ${selection.kind === "pause" ? "supplier-action--warning" : "supplier-action--success"}`}>{pending?"Processando…":selection.kind === "create" ? "Confirmar criação" : selection.kind === "edit" ? "Confirmar alteração" : "Confirmar pausa"}</button>}
+            </div>
         </section>}
-        <footer className="mt-4"><button type="button" disabled={busy} onClick={onClose} className={button}>Cancelar</button></footer>
+        <footer className="mt-4"><button type="button" disabled={busy||initialStockPartial} onClick={onClose} className={button}>Cancelar</button></footer>
     </dialog>,document.body);
 }

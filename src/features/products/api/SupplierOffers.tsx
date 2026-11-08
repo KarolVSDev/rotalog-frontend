@@ -5,13 +5,16 @@ import {SupplierWarehouses} from "./SupplierWarehouses";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useLocation} from "react-router-dom";
 import {formatMoney} from "../../orders/api/orderAdapter";
-import {OffersRepository, eligibleWarehouse, offerError, warehouseError as warehouseCreationError, type WarehouseCreate, type OfferPage, type Warehouse} from "./offersRepository";
+import {InventoryRepository, inventoryError} from "../../inventory/api/inventoryRepository";
+import {OffersRepository, eligibleWarehouse, offerError, warehouseError as warehouseCreationError, type WarehouseCreate, type Offer, type OfferPage, type Warehouse} from "./offersRepository";
 import {OfferDialog, type OfferCommand, type OfferSelection} from "./OfferDialog";
+import {createOfferWithInitialStock} from "./offerCreation";
 
 import {WarehouseDialog} from "./WarehouseDialog";
 import {StatusBadge} from "../../../shared/components/SupplierVisuals";
 
 const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium disabled:opacity-50";
+type PendingInitialStock = {offer:Offer;warehouse:Warehouse;initialStock:string;safetyStock:string};
 export function SupplierOffers({organizationId,tab,onTabChange,renderCatalog}:{organizationId:string;tab:ProductsTab;onTabChange:(tab:ProductsTab)=>void;renderCatalog:(create:(product:CatalogProduct)=>void,canCreate:boolean)=>ReactNode}) {
     const {hash}=useLocation();
     const anchorReached=useRef(false);
@@ -36,6 +39,8 @@ export function SupplierOffers({organizationId,tab,onTabChange,renderCatalog}:{o
     const [needsReview,setNeedsReview] = useState(false);
     const [checked,setChecked] = useState(false);
     const [reviewedAfterFailure,setReviewedAfterFailure] = useState(false);
+    const [initialStockPending,setInitialStockPending] = useState<PendingInitialStock|null>(null);
+    const [initialStockError,setInitialStockError] = useState<string|null>(null);
     useEffect(()=>{
         if(hash!=="#minhas-ofertas"){anchorReached.current=false;return;}
         if(offers&&warehouses&&!anchorReached.current){
@@ -55,24 +60,53 @@ export function SupplierOffers({organizationId,tab,onTabChange,renderCatalog}:{o
         setOffers(null);setWarehouses(null);setListError(null);setWarehouseError(null);
         setQuery(previous=>({page,refresh:previous.refresh+1}));
     }
-    function choose(value:OfferSelection) {setError(null);setFailed(false);setSuccess(null);setSelection(value);}
+    function choose(value:OfferSelection) {setError(null);setInitialStockError(null);setFailed(false);setSuccess(null);setSelection(value);}
     async function confirm(command:OfferCommand) {
         if(!selection || submitting.current)return;
         submitting.current=true;setPending(true);setError(null);
         try {
             if(selection.kind === "create") {
                 if(!command.product || !command.warehouse)throw new Error("Selecione produto e depósito.");
-                await repository.create(command.product,command.warehouse,command.price,command.quantity);
+                const result=await createOfferWithInitialStock({
+                    offers:repository,
+                    inventory:new InventoryRepository(organizationId),
+                    product:command.product,
+                    warehouse:command.warehouse,
+                    price:command.price,
+                    minimumOrderQuantity:command.quantity,
+                    initialStock:command.initialStock,
+                    safetyStock:command.safetyStock,
+                });
+                if(!mounted.current)return;
+                if(result.status==="partial") {
+                    setInitialStockPending({offer:result.offer,warehouse:command.warehouse,initialStock:command.initialStock,safetyStock:command.safetyStock});
+                    setInitialStockError(inventoryError(result.error));
+                    return;
+                }
             } else if(selection.kind === "edit") await repository.update(selection.offer,command.price,command.quantity);
             else await repository.pause(selection.offer);
             if(!mounted.current)return;
-            setSuccess(selection.kind === "create" ? "Oferta criada com sucesso." : selection.kind === "edit" ? "Oferta atualizada com sucesso." : "Oferta pausada. Ela não aparece mais na lista de ofertas ativas.");
+            setSuccess(selection.kind === "create" ? "Oferta e estoque inicial registrados com sucesso." : selection.kind === "edit" ? "Oferta atualizada com sucesso." : "Oferta pausada. Ela não aparece mais na lista de ofertas ativas.");
             setSelection(null);refresh(1);
         } catch(failure) {
             if(!mounted.current)return;
             const uncertain=repository.creationNeedsReview();
             setNeedsReview(uncertain);setChecked(false);setReviewedAfterFailure(false);setFailed(true);
             setError(`${offerError(failure)}${uncertain ? " A criação pode ter sido concluída. Confira a listagem antes de iniciar outra tentativa." : ""}`);
+        } finally {submitting.current=false;if(mounted.current)setPending(false);}
+    }
+    async function retryInitialStock(sellable:string,safety:string) {
+        const partial=initialStockPending;
+        if(!partial||submitting.current)return;
+        submitting.current=true;setPending(true);setInitialStockError(null);
+        try {
+            await new InventoryRepository(organizationId).initializeOfferStock(partial.offer,partial.warehouse,sellable,safety);
+            if(!mounted.current)return;
+            setInitialStockPending(null);setSelection(null);
+            setSuccess("Oferta e estoque inicial registrados com sucesso.");
+            refresh(1);
+        } catch(failure) {
+            if(mounted.current)setInitialStockError(inventoryError(failure));
         } finally {submitting.current=false;if(mounted.current)setPending(false);}
     }
     async function confirmWarehouse(values:WarehouseCreate) {
@@ -91,7 +125,7 @@ export function SupplierOffers({organizationId,tab,onTabChange,renderCatalog}:{o
             setWarehouseMutationError(`${warehouseCreationError(failure)}${uncertain ? " O cadastro pode ter sido concluído. Feche o formulário, atualize e confira os depósitos antes de cadastrar novamente." : ""}`);
         } finally {submitting.current=false;if(mounted.current)setPending(false);}
     }
-    const canCreate = offers !== null && !listError && warehouses !== null && warehouses.some(item=>eligibleWarehouse(item,organizationId)) && !warehouseError && !pending && !warehouseDialog && !needsReview && !failed;
+    const canCreate = offers !== null && !listError && warehouses !== null && warehouses.some(item=>eligibleWarehouse(item,organizationId)) && !warehouseError && !pending && !warehouseDialog && !needsReview && !failed && !initialStockPending;
     return <section aria-label="Depósitos e ofertas" className="min-w-0 space-y-4">
         <div id="products-panel-warehouses" role="tabpanel" aria-labelledby="products-tab-warehouses" hidden={tab!=="warehouses"} tabIndex={0}><SupplierWarehouses warehouses={warehouses} warehouseError={warehouseError} warehouseSuccess={warehouseSuccess} warehouseMutationError={warehouseMutationError} warehouseDialog={warehouseDialog} warehouseUncertain={warehouseUncertain} warehouseReviewed={warehouseReviewed} pending={pending} selection={selection} organizationId={organizationId} refresh={()=>refresh()} onCreate={()=>{setWarehouseMutationError(null);setWarehouseSuccess(null);setWarehouseDialog(true);}} onReview={()=>{repository.acknowledgeWarehouseReview();setWarehouseUncertain(false);setWarehouseMutationError(null);}}/></div>
         <div id="products-panel-offers" role="tabpanel" aria-labelledby="products-tab-offers" hidden={tab!=="offers"} tabIndex={0}>
@@ -109,6 +143,6 @@ export function SupplierOffers({organizationId,tab,onTabChange,renderCatalog}:{o
         </div>
         <div id="products-panel-catalog" role="tabpanel" aria-labelledby="products-tab-catalog" hidden={tab!=="catalog"} tabIndex={0}>{renderCatalog(product=>{onTabChange("offers");choose({kind:"create",product});},canCreate)}</div>
         {warehouseDialog && <WarehouseDialog pending={pending} error={warehouseMutationError} uncertain={warehouseUncertain} onClose={()=>setWarehouseDialog(false)} onConfirm={confirmWarehouse}/>}
-        {selection && <OfferDialog selection={selection} organizationId={organizationId} warehouses={warehouses ?? []} pending={pending} error={error} failed={failed} onClose={()=>{setSelection(null);}} onConfirm={confirm}/>}
+        {selection && <OfferDialog selection={selection} organizationId={organizationId} warehouses={warehouses ?? []} pending={pending} error={error} failed={failed} initialStockPartial={!!initialStockPending&&selection.kind==="create"} initialStockError={initialStockError} onRetryInitialStock={retryInitialStock} onClose={()=>{setSelection(null);}} onConfirm={confirm}/>}
     </section>;
 }
