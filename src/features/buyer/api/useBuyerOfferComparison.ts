@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isPurchasableOffer } from "./buyerCatalog";
 
 export type ComparableOffer = {
     id: string;
@@ -12,7 +13,7 @@ export type ComparableOffer = {
 };
 
 export function useOfferComparison<T extends ComparableOffer>(offers: T[], productId: string) {
-    const activeOffers = offers.filter(offer => offer.product_id === productId && offer.is_active);
+    const activeOffers = offers.filter(offer => offer.product_id === productId && isPurchasableOffer(offer));
     const [selection, setSelection] = useState<{ productId: string; ids: string[] }>({ productId, ids: [] });
     const selectedOfferIds = selection.productId === productId
         ? selection.ids.filter(id => activeOffers.some(offer => offer.id === id))

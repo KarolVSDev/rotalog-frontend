@@ -10,9 +10,9 @@ function load(path,dependencies={},extras={}) {
 let httpResponse;
 const http=load('src/shared/api/http.ts',{'./config':{apiUrl:''}},{fetch:async()=>httpResponse});
 const offers=load('src/features/products/api/offersRepository.ts',{'../../services/apiAuth.service':{},'../../../shared/api/http':http});
-const {InventoryRepository,adjustmentValues,stockQuantity,inventoryError}=load('src/features/inventory/api/inventoryRepository.ts',{'../../services/apiAuth.service':{},'../../../shared/api/http':http,'../../products/api/offersRepository':offers});
-const warehouse={id:'warehouse',supplier_organization_id:'org',is_active:true};
-const offer={id:'offer',warehouse_id:'warehouse',supplier_organization_id:'org'};
+const {InventoryRepository,adjustmentValues,initialStockValues,stockQuantity,inventoryError}=load('src/features/inventory/api/inventoryRepository.ts',{'../../services/apiAuth.service':{},'../../../shared/api/http':http,'../../products/api/offersRepository':offers});
+const warehouse={id:'warehouse',supplier_organization_id:'org',is_active:true,geocoding_state:'CONFIRMED'};
+const offer={id:'offer',warehouse_id:'warehouse',supplier_organization_id:'org',available_quantity:0};
 const item={id:'balance',offer_id:'offer',warehouse_id:'warehouse',external_physical_quantity:null,external_sellable_quantity:20,rotalog_reserved_not_reflected_quantity:3,safety_stock_quantity:2,effective_sellable_quantity:15,version:4,source:'MANUAL',freshness_state:'FRESH',source_observed_at:'2026-10-22T12:00:00Z',received_at:'2026-10-22T12:00:00Z',demo_run_id:'demo'};
 function transport(handler) {
     return async(path,options)=>{
@@ -25,6 +25,8 @@ function transport(handler) {
 (async()=>{
     assert.equal(stockQuantity('0'),0);assert.equal(stockQuantity('2147483647'),2147483647);
     for(const value of ['-1','1.5','1e2','2147483648',''])assert.throws(()=>stockQuantity(value));
+    assert.deepEqual(JSON.parse(JSON.stringify(initialStockValues('12','3'))),{external_sellable_quantity:12,safety_stock_quantity:3});
+    assert.throws(()=>initialStockValues('2','3'),/igual ou maior/);
     assert.throws(()=>adjustmentValues(item,'4','2','Contagem conferida'),/reservas/);
     assert.throws(()=>adjustmentValues(item,'20','2','oi'),/justificativa/);
     const calls=[];
@@ -32,7 +34,7 @@ function transport(handler) {
         calls.push({path,options});
         if(options.method==='POST'){
             const body=JSON.parse(options.body);
-            return {...item,external_sellable_quantity:body.external_sellable_quantity,safety_stock_quantity:body.safety_stock_quantity,effective_sellable_quantity:77,version:5};
+            return {...item,id:body.offer_id==='new-offer'?'new-balance':item.id,offer_id:body.offer_id,external_sellable_quantity:body.external_sellable_quantity,safety_stock_quantity:body.safety_stock_quantity,effective_sellable_quantity:77,version:5};
         }
         const page=Number(new URL(path,'http://local').searchParams.get('page'));
         return {items:[item],total:26,page,page_size:25};
@@ -47,6 +49,36 @@ function transport(handler) {
     await assert.rejects(repository.adjust(item,'25','4','Conferência de saldo'),/Atualize/);
     await assert.rejects(repository.list(1,{warehouseId:'other',offerId:''}),/autorizado/);
     await assert.rejects(repository.list(1,{warehouseId:'',offerId:'other'}),/autorizada/);
+    const initializedCalls=[];
+    const initializedRepository=new InventoryRepository('org',transport(async(path,options)=>{
+        initializedCalls.push({path,options});
+        if(options.method==='POST') {
+            const body=JSON.parse(options.body);
+            return {...item,id:'new-balance',offer_id:body.offer_id,external_sellable_quantity:body.external_sellable_quantity,safety_stock_quantity:body.safety_stock_quantity,effective_sellable_quantity:17,version:2};
+        }
+        return {items:[{...item,id:'new-balance',offer_id:'new-offer',warehouse_id:'warehouse',external_sellable_quantity:0,rotalog_reserved_not_reflected_quantity:0,safety_stock_quantity:0,effective_sellable_quantity:0,version:1}],total:1,page:1,page_size:25};
+    }));
+    const createdOffer={...offer,id:'new-offer'};
+    await initializedRepository.initializeOfferStock(createdOffer,warehouse,'20','3');
+    assert.equal(initializedCalls.length,2);
+    assert.match(initializedCalls[0].path,/offer_id=new-offer/);
+    assert.equal(initializedCalls[1].path,'/api/v1/inventory/manual-adjustments');
+    assert.deepEqual(JSON.parse(initializedCalls[1].options.body),{offer_id:'new-offer',warehouse_id:'warehouse',external_sellable_quantity:20,safety_stock_quantity:3,expected_version:1,reason:'Estoque inicial informado na criação da oferta'});
+    let reconciliationPosts=0;
+    let currentStock={...item,id:'new-balance',offer_id:'new-offer',warehouse_id:'warehouse',external_sellable_quantity:0,rotalog_reserved_not_reflected_quantity:0,safety_stock_quantity:0,effective_sellable_quantity:0,version:1};
+    const reconciled=new InventoryRepository('org',transport(async(path,options)=>{
+        if(options.method==='POST'){
+            reconciliationPosts++;
+            currentStock={...currentStock,external_sellable_quantity:20,safety_stock_quantity:3,effective_sellable_quantity:17,version:2};
+            throw new Error('response lost after applying adjustment');
+        }
+        return {items:[currentStock],total:1,page:1,page_size:25};
+    }));
+    await assert.rejects(reconciled.initializeOfferStock(createdOffer,warehouse,'20','3'),/response lost/);
+    const reconciledResult=await reconciled.initializeOfferStock(createdOffer,warehouse,'20','3');
+    assert.equal(reconciledResult.version,2);assert.equal(reconciliationPosts,1);
+    const changed=new InventoryRepository('org',transport(async()=>({items:[{...item,id:'new-balance',offer_id:'new-offer',warehouse_id:'warehouse',external_sellable_quantity:10,rotalog_reserved_not_reflected_quantity:0,safety_stock_quantity:0,effective_sellable_quantity:10,version:2}],total:1,page:1,page_size:25})));
+    await assert.rejects(changed.initializeOfferStock(createdOffer,warehouse,'20','3'),/Não foi alterado novamente/);
     for(const value of [{...item,warehouse_id:'other'},{...item,effective_sellable_quantity:-1},{...item,external_physical_quantity:undefined},null]){
         const invalid=new InventoryRepository('org',transport(async()=>({items:[value],total:1,page:1,page_size:25})));
         await invalid.loadReferences();await assert.rejects(invalid.list(1,{warehouseId:'',offerId:''}));

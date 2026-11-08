@@ -5,8 +5,9 @@ const ts=require('typescript');
 function load(path,dependencies={}){const module={exports:{}};const code=ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(code,{module,exports:module.exports,require:id=>dependencies[id],URLSearchParams,BigInt,Intl});return module.exports;}
 class ApiError extends Error{constructor(status,code){super();this.status=status;this.code=code;}}
 const adapter=load('src/features/orders/api/orderAdapter.ts');
-const {BuyerRepository,validateCart,money,buyerError}=load('src/features/buyer/api/buyerRepository.ts',{'../../services/apiAuth.service':{},'../../../shared/api/http':{ApiError},'../../orders/api/orderAdapter':adapter});
-const offer={id:'offer',product_name:'Arroz',supplier_organization_id:'supplier',warehouse_id:'warehouse',minimum_order_quantity:2,available_quantity:20,is_active:true};
+const buyerCatalog=load('src/features/buyer/api/buyerCatalog.ts');
+const {BuyerRepository,validateCart,money,buyerError}=load('src/features/buyer/api/buyerRepository.ts',{'../../services/apiAuth.service':{},'../../../shared/api/http':{ApiError},'../../orders/api/orderAdapter':adapter,'./buyerCatalog':buyerCatalog});
+const offer={id:'offer',product_name:'Arroz',supplier_organization_id:'supplier',warehouse_id:'warehouse',minimum_order_quantity:2,available_quantity:20,unit_price:'10.00',is_active:true};
 assert.doesNotThrow(()=>validateCart([offer],[2]));
 for(const quantity of [0,1,21,1.5,NaN,2147483648])assert.throws(()=>validateCart([offer],[quantity]));
 assert.throws(()=>validateCart([],[]));assert.throws(()=>validateCart([offer,offer],[2,2]));
