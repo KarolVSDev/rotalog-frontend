@@ -1,6 +1,6 @@
 import {authenticatedRequest} from "../../services/apiAuth.service";
 import {ApiError} from "../../../shared/api/http";
-import {OffersRepository, type Offer, type Warehouse} from "../../products/api/offersRepository";
+import {eligibleWarehouse, OffersRepository, type Offer, type Warehouse} from "../../products/api/offersRepository";
 
 export type Inventory = {
     id:string; offer_id:string; warehouse_id:string; external_physical_quantity:number | null;
@@ -15,11 +15,18 @@ export type InventoryReferences = {warehouses:Warehouse[]; offers:Offer[]};
 export type InventoryFilters = {warehouseId:string; offerId:string};
 type Transport = <T>(path:string,options?:RequestInit)=>Promise<T>;
 const maxQuantity=2_147_483_647;
+export const initialStockReason="Estoque inicial informado na criação da oferta";
 export function stockQuantity(input:string):number {
     if(!/^\d+$/.test(input))throw new Error("Informe uma quantidade inteira não negativa.");
     const quantity=Number(input);
     if(!Number.isSafeInteger(quantity)||quantity<0||quantity>maxQuantity)throw new Error("Informe uma quantidade entre 0 e 2147483647.");
     return quantity;
+}
+export function initialStockValues(sellable:string,safety:string) {
+    const external_sellable_quantity=stockQuantity(sellable);
+    const safety_stock_quantity=stockQuantity(safety);
+    if(external_sellable_quantity<safety_stock_quantity)throw new Error("O estoque vendável deve ser igual ou maior que o estoque de segurança.");
+    return {external_sellable_quantity,safety_stock_quantity};
 }
 export function adjustmentValues(item:Inventory,sellable:string,safety:string,reason:string) {
     const external_sellable_quantity=stockQuantity(sellable);
@@ -93,6 +100,25 @@ export class InventoryRepository {
         if(new Set(items.map(item=>item.id)).size!==items.length||items.some(item=>(filters.warehouseId&&item.warehouse_id!==filters.warehouseId)||(filters.offerId&&item.offer_id!==filters.offerId)))throw new Error("Resposta de estoque não corresponde aos filtros solicitados.");
         items.forEach(item=>this.snapshots.set(item.id,item));
         return {...response,items};
+    }
+    async initializeOfferStock(offer:Offer,warehouse:Warehouse,sellable:string,safety:string):Promise<Inventory> {
+        this.validateNewOfferContext(offer,warehouse);
+        const {external_sellable_quantity:desiredSellable,safety_stock_quantity:desiredSafety}=initialStockValues(sellable,safety);
+        const reason=initialStockReason;
+        this.references={warehouses:[warehouse],offers:[offer]};
+        const page=await this.list(1,{warehouseId:warehouse.id,offerId:offer.id});
+        if(page.total!==1||page.items.length!==1)throw new Error("Não foi possível localizar o saldo inicial desta oferta. Atualize o estoque antes de continuar.");
+        const item=page.items[0];
+        if(item.version>1) {
+            if(item.external_sellable_quantity===desiredSellable&&item.safety_stock_quantity===desiredSafety)return item;
+            throw new Error("O saldo da oferta mudou desde a criação. Não foi alterado novamente; consulte o módulo Estoque para revisar o valor atual.");
+        }
+        if(item.external_sellable_quantity!==0||item.safety_stock_quantity!==0||item.rotalog_reserved_not_reflected_quantity!==0)throw new Error("O saldo inicial não está zerado como esperado. Consulte o módulo Estoque antes de ajustar.");
+        return this.adjust(item,sellable,safety,reason);
+    }
+    private validateNewOfferContext(offer:Offer,warehouse:Warehouse):void {
+        if(offer.supplier_organization_id!==this.organizationId)throw new Error("Recurso retornado pertence a outra organização.");
+        if(offer.warehouse_id!==warehouse.id||!eligibleWarehouse(warehouse,this.organizationId))throw new Error("A oferta deve pertencer a um depósito próprio, ativo e confirmado.");
     }
     async adjust(item:Inventory,sellable:string,safety:string,reason:string):Promise<Inventory> {
         this.validate(item);

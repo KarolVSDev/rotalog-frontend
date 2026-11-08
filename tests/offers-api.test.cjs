@@ -9,6 +9,7 @@ function load(path,dependencies={}) {
 }
 const http=load('src/shared/api/http.ts',{'./config':{apiUrl:''}});
 const {OffersRepository,eligibleWarehouse,offerPrice,minimumQuantity,offerError}=load('src/features/products/api/offersRepository.ts',{'../../services/apiAuth.service':{},'../../../shared/api/http':http});
+const {createOfferWithInitialStock}=load('src/features/products/api/offerCreation.ts');
 const warehouse={id:'warehouse',supplier_organization_id:'org',is_active:true,geocoding_state:'CONFIRMED'};
 const product={id:'product',publication_state:'PUBLISHED'};
 const offer={id:'offer',supplier_organization_id:'org',is_active:true,version:7};
@@ -37,6 +38,42 @@ const offer={id:'offer',supplier_organization_id:'org',is_active:true,version:7}
     assert.deepEqual(JSON.parse(calls.at(-1).options.body),{expected_version:7,unit_price:'15.20',currency:'BRL',minimum_order_quantity:4});
     await repository.pause(offer);assert.deepEqual(JSON.parse(calls.at(-1).options.body),{expected_version:7});
     assert.ok(calls.every(call=>call.options.headers['X-Organization-Id']==='org'));
+    let stockRegistrations=0;
+    const offerCreation=await createOfferWithInitialStock({
+        offers:{create:async()=>offer},
+        inventory:{initializeOfferStock:async(created,selectedWarehouse,sellable,safety)=>{stockRegistrations++;assert.equal(created.id,offer.id);assert.equal(selectedWarehouse.id,warehouse.id);assert.equal(sellable,'20');assert.equal(safety,'2');}},
+        product,warehouse,price:'12.30',minimumOrderQuantity:'3',initialStock:'20',safetyStock:'2',
+    });
+    assert.equal(offerCreation.status,'complete');assert.equal(stockRegistrations,1);
+    let postCreationStockCalls=0;
+    const partial=await createOfferWithInitialStock({
+        offers:{create:async()=>offer},
+        inventory:{initializeOfferStock:async()=>{postCreationStockCalls++;throw new Error('Stock service unavailable');}},
+        product,warehouse,price:'12.30',minimumOrderQuantity:'3',initialStock:'20',safetyStock:'2',
+    });
+    assert.equal(partial.status,'partial');assert.equal(partial.offer.id,offer.id);assert.equal(postCreationStockCalls,1);
+    let offerCreateAttempts=0,stockAttempts=0;
+    const retryInventory={initializeOfferStock:async()=>{stockAttempts++;if(stockAttempts===1)throw new Error('Temporary stock failure');}};
+    const retryResult=await createOfferWithInitialStock({
+        offers:{create:async()=>{offerCreateAttempts++;return offer;}},
+        inventory:retryInventory,
+        product,warehouse,price:'12.30',minimumOrderQuantity:'3',initialStock:'20',safetyStock:'2',
+    });
+    assert.equal(retryResult.status,'partial');
+    await retryInventory.initializeOfferStock(retryResult.offer,warehouse,'20','2');
+    assert.equal(offerCreateAttempts,1);assert.equal(stockAttempts,2);
+    let stockAfterFailedCreation=0;
+    await assert.rejects(createOfferWithInitialStock({
+        offers:{create:async()=>{throw new http.ApiError(422);}},
+        inventory:{initializeOfferStock:async()=>{stockAfterFailedCreation++;}},
+        product,warehouse,price:'12.30',minimumOrderQuantity:'3',initialStock:'20',safetyStock:'2',
+    }),error=>error.status===422);
+    assert.equal(stockAfterFailedCreation,0);
+    let concurrentCalls=0,releaseOffer;
+    const concurrent=new OffersRepository('org',async(_path,_options)=>{concurrentCalls++;await new Promise(resolve=>{releaseOffer=resolve;});return offer;});
+    const firstOffer=concurrent.create(product,warehouse,'12.30','1');
+    await assert.rejects(concurrent.create(product,warehouse,'12.30','1'),/andamento/);
+    releaseOffer();await firstOffer;assert.equal(concurrentCalls,1);
     assert.throws(()=>repository.create({...product,publication_state:'DRAFT'},warehouse,'1','1'));
     assert.throws(()=>repository.create(product,{...warehouse,is_active:false},'1','1'));
     assert.throws(()=>repository.update({...offer,supplier_organization_id:'other'},'1','1'));
