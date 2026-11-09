@@ -6,8 +6,29 @@ export type BuyerCatalogPage = {
     offers: Offer[];
 };
 
+export type BuyerCatalogFilters = {
+    category: string;
+    brand: string;
+    stock: "any" | "above-minimum" | "at-minimum";
+    sort: "recommended" | "name" | "price-ascending" | "price-descending";
+};
+
 const pageSize = 25;
 const maximumQuantity = 2_147_483_647;
+
+function priceInCents(price: string): bigint {
+    const [whole, fraction = ""] = price.split(".");
+    return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
+}
+
+function lowestOffer(offers: Offer[], productId: string): Offer | undefined {
+    return offers.reduce<Offer | undefined>((lowest, offer) => {
+        if (offer.product_id !== productId || !isPurchasableOffer(offer)) return lowest;
+        return !lowest || priceInCents(offer.unit_price) < priceInCents(lowest.unit_price)
+            ? offer
+            : lowest;
+    }, undefined);
+}
 
 export function isPurchasableOffer(
     offer: Pick<Offer, "is_active" | "unit_price" | "minimum_order_quantity" | "available_quantity">,
@@ -82,4 +103,41 @@ export function availableBuyerProducts(
             ...productOffers.map(offer => offer.supplier_name),
         ].some(value => value.toLocaleLowerCase("pt-BR").includes(term));
     });
+}
+
+export function filterAndSortBuyerProducts(
+    products: CatalogProduct[],
+    offers: Offer[],
+    filters: BuyerCatalogFilters,
+): CatalogProduct[] {
+    const filtered = products.filter(product => {
+        if (filters.category && product.category !== filters.category) return false;
+        if (filters.brand && product.brand !== filters.brand) return false;
+        if (filters.stock !== "any") {
+            const matchingStock = offers.some(offer => {
+                if (offer.product_id !== product.id || !isPurchasableOffer(offer)) return false;
+                return filters.stock === "above-minimum"
+                    ? offer.available_quantity > offer.minimum_order_quantity
+                    : offer.available_quantity === offer.minimum_order_quantity;
+            });
+            if (!matchingStock) return false;
+        }
+        return true;
+    });
+
+    if (filters.sort === "name") {
+        return filtered.sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+    }
+    if (filters.sort === "price-ascending" || filters.sort === "price-descending") {
+        const direction = filters.sort === "price-ascending" ? 1 : -1;
+        return filtered.sort((left, right) => {
+            const leftOffer = lowestOffer(offers, left.id);
+            const rightOffer = lowestOffer(offers, right.id);
+            if (!leftOffer || !rightOffer) return leftOffer ? -1 : rightOffer ? 1 : 0;
+            const leftPrice = priceInCents(leftOffer.unit_price);
+            const rightPrice = priceInCents(rightOffer.unit_price);
+            return leftPrice === rightPrice ? 0 : leftPrice < rightPrice ? -direction : direction;
+        });
+    }
+    return filtered;
 }

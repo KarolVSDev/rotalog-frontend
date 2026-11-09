@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 
 import { appRoutes } from "../../app/routePermissions";
 import {SupplierIcon, type IconName} from "./SupplierVisuals";
+import {BrandLogo} from "./BrandLogo";
 import type { Permission } from "../../features/auth/mocks/users.mock";
 
 type PortalType = "supplier" | "buyer" | "admin";
@@ -55,8 +56,8 @@ export function Sidebar({
             "/admin": "home", "/admin/products": "products", "/admin/products/new": "add",
         };
         const supplierItems = navigation ?? (portal === "admin" ? [] : appRoutes.filter(route => permissions.includes(route.permission) || route.path === "/fornecedor/rotas"));
-        return <aside className="supplier-sidebar">
-            <NavLink to={homePath} className="supplier-brand"><span className="supplier-brand-mark" aria-hidden="true">↯</span><span>Rota<span className="text-blue-600">Log</span></span></NavLink>
+        return <aside className={`supplier-sidebar ${portal === "admin" ? "supplier-sidebar--admin" : ""}`}>
+            <NavLink to={homePath} aria-label="RotaLog — início" className="supplier-brand"><BrandLogo/></NavLink>
             <p className="supplier-nav-caption">{caption ?? (portal === "admin" ? "ADMINISTRAÇÃO" : "ÁREA DO FORNECEDOR")}</p>
             <nav aria-label={portal === "admin" ? "Menu administrativo" : "Menu principal"} className="space-y-1">{supplierItems.map(route => <NavLink key={route.path} to={route.path} end={route.path === "/fornecedor" || route.path === "/admin"} className={({isActive}) => `supplier-nav-link ${isActive ? "is-active" : ""}`}><SupplierIcon name={icons[route.path] ?? "home"}/><span>{route.label}</span>{route.path === "/fornecedor/pedidos" && pendingOrdersCount > 0 && <span className="supplier-nav-count" aria-label={`${pendingOrdersCount} ${pendingOrdersCount === 1 ? "pedido aguardando aceite" : "pedidos aguardando aceite"}`} aria-live="polite">{pendingOrdersCount}</span>}</NavLink>)}</nav>
             <div className="supplier-sidebar-bottom">
@@ -69,7 +70,7 @@ export function Sidebar({
     }
 
     return <aside className="h-full w-64 overflow-y-auto bg-slate-900 p-5 text-white">
-        <div className="mb-10"><NavLink to="/" className="block text-2xl font-bold text-white">RotaLog</NavLink><p className="mt-1 text-sm text-slate-400">Portal do Comprador</p></div>
+        <div className="mb-10"><NavLink to="/" aria-label="RotaLog — início" className="inline-flex rounded-lg bg-white px-2 py-1"><BrandLogo/></NavLink><p className="mt-2 text-sm text-slate-400">Portal do Comprador</p></div>
         <nav aria-label="Menu principal" className="space-y-2">{visibleItems.map(route=><NavLink key={route.path} to={route.path} end={route.path === "/comprador/carrinho"} className={({isActive})=>`flex items-center justify-between gap-2 rounded-lg px-4 py-3 text-sm transition-colors ${isActive ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}>{route.label}</NavLink>)}</nav>
         <div className="mt-8 border-t border-slate-700 pt-5"><NavLink to="/" className="block rounded-lg px-4 py-3 text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white">Voltar ao catálogo</NavLink></div>
     </aside>;

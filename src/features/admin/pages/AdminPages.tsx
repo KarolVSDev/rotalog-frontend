@@ -77,30 +77,37 @@ export function AdminOverview() {
     const identifiedCount = snapshot ? snapshot.products.filter(product => product.gtin !== null).length : 0;
 
     return <div className="space-y-6">
-        <PageHeader title={`Olá, ${user?.name ?? "administrador"}`} subtitle="Gerencie a identificação dos produtos do catálogo RotaLog."/>
-        <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#102957] via-blue-900 to-blue-700 p-6 text-white shadow-sm sm:p-8">
-            <div className="max-w-3xl">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-200">Área administrativa</p>
-                <h2 className="admin-catalog-banner-title mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Catálogo canônico</h2>
-                <p className="mt-3 text-sm leading-6 text-blue-100 sm:text-base">Cadastre informações de identificação e embalagem. Preços, ofertas e estoque são gerenciados pelos fornecedores.</p>
-                <div className="mt-6 flex flex-wrap gap-3">
-                    <Link className="inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-900 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" to="/admin/products">Ver produtos publicados</Link>
-                    {canWriteProducts && <Link className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/40 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" to="/admin/products/new">Cadastrar produto</Link>}
-                </div>
+        <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="min-w-0">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Visão geral</h1>
+                <p className="mt-1 text-sm text-slate-600">Gerencie o catálogo oficial de produtos do RotaLog.</p>
             </div>
-        </section>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                {canWriteProducts && <Link className={primaryButton} to="/admin/products/new">Cadastrar produto</Link>}
+                <Link className="inline-flex min-h-10 items-center text-sm font-semibold text-blue-800 hover:text-blue-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700" to="/admin/products">Produtos publicados<span aria-hidden="true" className="ml-1">→</span></Link>
+            </div>
+        </header>
         <section className="space-y-4" aria-label="Indicadores do catálogo">
             <div className="flex flex-wrap items-end justify-between gap-2">
-                <div><h2 className="text-lg font-bold text-slate-900">Visão geral do catálogo</h2><p className="mt-1 text-sm text-slate-600">Indicadores de produtos publicados, carregados em todas as páginas da API.</p></div>
+                <div><h2 className="text-lg font-bold text-slate-900">Indicadores do catálogo</h2><p className="mt-1 text-sm text-slate-600">Resumo dos produtos publicados e identificados.</p></div>
                 {snapshot && <p className="text-xs text-slate-500">Total informado pela API: {snapshot.total}</p>}
             </div>
             {!snapshot && !error && <p role="status" aria-live="polite" className="text-sm text-slate-600">Carregando indicadores do catálogo…</p>}
             {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>Não foi possível carregar os indicadores do catálogo: {error}</p><button type="button" className="mt-2 font-semibold underline" onClick={() => setAttempt(value => value + 1)}>Tentar novamente</button></div>}
             {snapshot && <>
                 <div className="grid gap-4 sm:grid-cols-3">
-                    <article className={cardClass}><p className="text-sm font-medium text-slate-600">Produtos publicados</p><p className="mt-2 text-3xl font-bold text-slate-900">{snapshot.total}</p><p className="mt-1 text-xs text-slate-500">Totalizador global da API</p></article>
-                    <article className={cardClass}><p className="text-sm font-medium text-slate-600">Marcas no catálogo</p><p className="mt-2 text-3xl font-bold text-slate-900">{brandCount}</p><p className="mt-1 text-xs text-slate-500">Calculado sobre o catálogo completo</p></article>
-                    <article className={cardClass}><p className="text-sm font-medium text-slate-600">Produtos com GTIN</p><p className="mt-2 text-3xl font-bold text-slate-900">{identifiedCount}</p><p className="mt-1 text-xs text-slate-500">De {snapshot.total} produtos publicados</p></article>
+                    <article className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-800" aria-hidden="true"><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H20v16H5.5A1.5 1.5 0 0 1 4 18.5zM4 17h16M8 8h8M8 12h5"/></svg></span>
+                        <div><p className="text-sm font-medium text-slate-600">Produtos publicados</p><p className="mt-1 text-3xl font-bold tracking-tight text-slate-950">{snapshot.total}</p><p className="mt-1 text-xs text-slate-500">Total publicado no catálogo</p></div>
+                    </article>
+                    <article className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-800" aria-hidden="true"><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9zM4.3 7.7 12 12l7.7-4.3M12 12v9M8 5.2l8 4.6"/></svg></span>
+                        <div><p className="text-sm font-medium text-slate-600">Marcas no catálogo</p><p className="mt-1 text-3xl font-bold tracking-tight text-slate-950">{brandCount}</p><p className="mt-1 text-xs text-slate-500">Marcas com produtos publicados</p></div>
+                    </article>
+                    <article className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800" aria-hidden="true"><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h7l5 5v13H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM14 3v6h6M8 15l2.5 2.5L16 12"/></svg></span>
+                        <div><p className="text-sm font-medium text-slate-600">Produtos com GTIN</p><p className="mt-1 text-3xl font-bold tracking-tight text-slate-950">{identifiedCount}</p><p className="mt-1 text-xs text-slate-500">De {snapshot.total} produtos publicados</p></div>
+                    </article>
                 </div>
                 <section className={`${cardClass} min-w-0`} aria-labelledby="admin-brand-chart-title">
                     <h3 id="admin-brand-chart-title" className="font-bold text-slate-900">Produtos publicados por marca</h3>
@@ -123,10 +130,6 @@ export function AdminOverview() {
                 </section>
             </>}
         </section>
-        <div className="grid gap-4 md:grid-cols-2">
-            <article className={`${cardClass} transition hover:border-blue-200 hover:shadow-md`}><span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg font-bold text-blue-800" aria-hidden="true">01</span><h3 className="mt-4 font-semibold text-slate-900">Consultar produtos</h3><p className="mt-2 text-sm leading-6 text-slate-600">Pesquise o catálogo publicado e consulte os dados de cada produto.</p><Link className="mt-4 inline-flex text-sm font-semibold text-blue-800 hover:underline" to="/admin/products">Abrir catálogo<span aria-hidden="true" className="ml-1">→</span></Link></article>
-            {canWriteProducts && <article className={`${cardClass} transition hover:border-blue-200 hover:shadow-md`}><span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-lg font-bold text-emerald-800" aria-hidden="true">02</span><h3 className="mt-4 font-semibold text-slate-900">Cadastrar produto</h3><p className="mt-2 text-sm leading-6 text-slate-600">Crie um rascunho e publique-o em uma etapa separada, após a revisão.</p><Link className="mt-4 inline-flex text-sm font-semibold text-blue-800 hover:underline" to="/admin/products/new">Iniciar cadastro<span aria-hidden="true" className="ml-1">→</span></Link></article>}
-        </div>
     </div>;
 }
 

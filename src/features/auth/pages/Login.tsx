@@ -4,6 +4,7 @@ import { authMode } from "../../../shared/api/config";
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { BrandLogo } from "../../../shared/components/BrandLogo";
 
 export function Login() {
     const { login, sessionError, sessionNotice, isLoading } = useAuth();
@@ -61,28 +62,9 @@ export function Login() {
                 {/* Coluna esquerda */}
                 <section className="flex flex-col bg-white px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
                     {/* Logo */}
-                    <Link to="/" className="flex w-fit items-center gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md">
-                            <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                className="h-6 w-6"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                            >
-                                <path d="m12 3 9 5-9 5-9-5 9-5Z" />
-                                <path d="m3 12 9 5 9-5" />
-                                <path d="m3 16 9 5 9-5" />
-                            </svg>
-                        </span>
-
+                    <Link to="/" aria-label="RotaLog — início" className="flex w-fit items-center gap-3">
+                        <BrandLogo size="large"/>
                         <span>
-                            <span className="block text-xl font-extrabold tracking-tight text-slate-900">
-                                RotaLog
-                            </span>
                             <span className="block text-[10px] text-slate-500">
                                 Conectando negócios. Entregando mais.
                             </span>
