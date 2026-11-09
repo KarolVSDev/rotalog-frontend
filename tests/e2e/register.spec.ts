@@ -47,6 +47,9 @@ test("o modo mock deixa claro que não cria contas", async ({ page }) => {
         await route.fulfill({ status: 201, json: {} });
     });
     await page.goto("/cadastro");
+    const logo = page.getByRole("link", { name: "RotaLog — início" }).getByRole("img", { name: "RotaLog" });
+    await expect(logo).toBeVisible();
+    expect(await logo.locator("img").evaluateAll(images => images.every(image => image.complete && image.naturalWidth > 0))).toBe(true);
     await expect(page.getByRole("status")).toContainText("Nenhuma conta será criada");
     await expect(page.getByRole("button", { name: "Criar conta" })).toBeDisabled();
     expect(registrationRequests).toBe(0);

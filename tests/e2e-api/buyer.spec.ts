@@ -59,6 +59,7 @@ async function setup(page:Page,restore=true) {
 test('router API preserva catálogo, detalhes do produto, lista e detalhes de compras',async({page})=>{
     const state=await setup(page);
     await page.goto('/');
+    await expect(page.getByRole('link',{name:'RotaLog — início'}).getByRole('img',{name:'RotaLog'})).toBeVisible();
     await expect(page.getByRole('heading',{name:'Catálogo de produtos',exact:true})).toBeVisible();
     await expect(page.getByRole('note')).toHaveText('Dados de demonstração');
     await page.getByRole('link',{name:'Ver produto',exact:true}).click();
@@ -98,7 +99,7 @@ test('jornada do comprador via router com respostas API interceptadas',async({pa
     await expect(page.getByLabel('Categoria nesta página')).toHaveCount(0);
     await expect(page.getByRole('img',{name:`Imagem de ${product.name} não disponível`})).toBeVisible();
     await expect(page.getByText('R$ 149,90',{exact:true}).first()).toBeVisible();
-    await expect(page.getByText('Oferta de Distribuidora oficial',{exact:true})).toBeVisible();
+    await expect(page.getByText('Fornecedor: Distribuidora oficial',{exact:true})).toBeVisible();
     await add(page);await reserve(page);
     await expect(page.getByRole('note')).toHaveText('Dados de demonstração');
     await expect(page.getByText('por unidade comercial da oferta',{exact:true})).toBeVisible();
@@ -131,13 +132,41 @@ test('catálogo considera a menor oferta ativa com estoque para o mínimo e info
     ];
     await page.goto('/');
     await expect(page.getByText('R$ 4,00',{exact:true})).toBeVisible();
-    await expect(page.getByText('Oferta de Distribuidora Econômica',{exact:true})).toBeVisible();
+    await expect(page.getByText('Fornecedor: Distribuidora Econômica',{exact:true})).toBeVisible();
     await expect(page.getByText('por fardo',{exact:true})).toBeVisible();
     await page.goto(`/produto/${product.id}`);
     await expect(page.getByText('R$ 149,90',{exact:false})).toBeVisible();
     await expect(page.getByText('R$ 4,00',{exact:false})).toBeVisible();
     await expect(page.getByText('R$ 1,00',{exact:true})).toHaveCount(0);
     await expect(page.getByText('por unidade comercial (fardo)',{exact:false}).first()).toBeVisible();
+    expect(state.created).toHaveLength(0);
+});
+test('catálogo filtra marca, categoria e estoque e ordena sem alterar os dados das ofertas',async({page})=>{
+    const state=await setup(page);
+    const secondProduct={...product,id:'second-product',name:'Feijão oficial',brand:'Marca alternativa',category:'ALIMENTO_ENLATADO'};
+    state.products=[product,secondProduct];
+    state.offers=[
+        offer,
+        {...offer,id:'offer-second',product_id:secondProduct.id,product_name:secondProduct.name,supplier_name:'Distribuidora alternativa',unit_price:'50.00',minimum_order_quantity:3,available_quantity:3},
+    ];
+    await page.goto('/');
+    await expect(page.getByRole('heading',{name:product.name,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:secondProduct.name,exact:true})).toBeVisible();
+    await expect(page.getByRole('article').filter({has:page.getByRole('heading',{name:product.name,exact:true})}).getByText('1000 g · 6 unidades · Fardo',{exact:true})).toBeVisible();
+
+    await page.getByRole('combobox',{name:'Marca'}).selectOption('Marca alternativa');
+    await expect(page.getByRole('heading',{name:secondProduct.name,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:product.name,exact:true})).toHaveCount(0);
+    await page.getByRole('combobox',{name:'Disponibilidade'}).selectOption('at-minimum');
+    await expect(page.getByRole('heading',{name:secondProduct.name,exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Limpar filtros'}).click();
+
+    await page.getByRole('combobox',{name:'Categoria'}).selectOption('ALIMENTO_ENLATADO');
+    await expect(page.getByRole('heading',{name:secondProduct.name,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:product.name,exact:true})).toHaveCount(0);
+    await page.getByRole('button',{name:'Limpar filtros'}).click();
+    await page.getByRole('combobox',{name:'Ordenar por'}).selectOption('price-ascending');
+    await expect(page.getByRole('article').first().getByRole('heading',{name:secondProduct.name,exact:true})).toBeVisible();
     expect(state.created).toHaveLength(0);
 });
 test('criação incerta não é repetida automaticamente e recupera a mesma chave após recarga',async({page})=>{
@@ -242,7 +271,7 @@ test('mobile: catálogo, detalhes e carrinho sem transbordamento horizontal',asy
 });
 test('catálogo vazio, falha de comunicação e histórico vazio não usam mocks',async({page})=>{
     const state=await setup(page);state.products=[];
-    await page.goto('/');await expect(page.getByRole('heading',{name:'Nenhum produto publicado encontrado'})).toBeVisible();
+    await page.goto('/');await expect(page.getByRole('heading',{name:'Nenhum produto disponível para compra'})).toBeVisible();
     state.emptyPurchases=true;await page.goto('/comprador/compras');await expect(page.getByText('Nenhuma compra encontrada para sua organização.')).toBeVisible();
     state.network=true;await page.reload();await expect(page.getByRole('alert')).toContainText('conectar');
     state.network=false;await page.getByRole('button',{name:'Tentar novamente'}).click();await expect(page.getByText('Nenhuma compra encontrada para sua organização.')).toBeVisible();
