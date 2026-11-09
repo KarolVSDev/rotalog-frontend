@@ -34,6 +34,15 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
         for (const [name, route] of routes) {
             await page.goto(route);
             await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toBeVisible();
+            await expect(page.locator(".supplier-topbar")).toContainText("Portal do fornecedor");
+            await expect(page.locator(".supplier-topbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
+            if (width >= 768) {
+                await expect(page.locator(".supplier-mobile-toolbar")).toBeHidden();
+                await expect(page.locator(".supplier-sidebar").getByRole("img", { name: "RotaLog" })).toBeVisible();
+            } else {
+                await expect(page.locator(".supplier-mobile-toolbar")).toBeVisible();
+                await expect(page.locator(".supplier-mobile-toolbar").getByRole("img", { name: "RotaLog" })).toBeVisible();
+            }
             if (name === "dashboard") await expect(page.getByRole("heading", { name: "Pedidos por situação", exact: true })).toBeVisible();
             expect.soft(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: overflow da página`).toBe(true);
             await page.screenshot({ path: testInfo.outputPath(`${name}-${width}.png`), fullPage: true });
@@ -63,9 +72,13 @@ for (const width of [390, 360]) {
         await page.setViewportSize({ width, height: 800 });
         await page.goto("/fornecedor");
         const trigger = page.getByRole("button", { name: "Abrir menu", exact: true });
+        await expect(page.locator(".supplier-mobile-toolbar").getByRole("img", { name: "RotaLog" })).toBeVisible();
+        await expect(page.locator(".supplier-topbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
         await trigger.focus();
         await page.keyboard.press("Enter");
         const dialog = page.getByRole("dialog", { name: "Menu do fornecedor", exact: true });
+        await expect(page.locator(".supplier-mobile-toolbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
+        await expect(dialog.getByRole("img", { name: "RotaLog" })).toBeVisible();
         await fitsViewport(page, dialog);
         await expect(dialog.getByRole("button", { name: "Fechar menu", exact: true })).toBeFocused();
         await expect(dialog.getByRole("button", { name: "Sair", exact: true })).toBeVisible();

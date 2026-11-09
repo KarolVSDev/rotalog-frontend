@@ -151,8 +151,18 @@ async function fillValidProduct(page: Page) {
 
 test("login administrativo consulta perfil e redireciona ao portal", async ({ page }) => {
     const state = await setup(page, "ROTALOG_ADMIN", false);
+    await page.goto("/login");
+    const loginLogo = page.getByRole("link", { name: "RotaLog — início" }).getByRole("img", { name: "RotaLog" });
+    await expect(loginLogo).toBeVisible();
+    expect(await loginLogo.locator("img").evaluateAll(images => images.every(image => image.complete && image.naturalWidth > 0))).toBe(true);
     await loginAsAdmin(page);
-    await expect(page.getByRole("heading", { name: "Catálogo canônico" })).toBeVisible();
+    await expect(page.locator(".supplier-sidebar").getByRole("img", { name: "RotaLog" })).toBeVisible();
+    await expect(page.locator(".supplier-topbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
+    await expect(page.locator(".supplier-topbar")).toContainText("Painel administrativo");
+    await expect(page.getByRole("heading", { name: "Visão geral", exact: true })).toBeVisible();
+    await expect(page.getByText("Gerencie o catálogo oficial de produtos do RotaLog.")).toBeVisible();
+    await expect(page.locator("#supplier-main-content").getByRole("link", { name: "Cadastrar produto", exact: true })).toHaveAttribute("href", "/admin/products/new");
+    await expect(page.locator("#supplier-main-content").getByRole("link", { name: "Produtos publicados", exact: true })).toHaveAttribute("href", "/admin/products");
     await expect(page.getByText("Total informado pela API: 0")).toBeVisible();
     expect(state.adminRequests.length).toBeGreaterThan(0);
     expect(state.adminRequests.every(path => path === "GET /api/v1/products")).toBe(true);
@@ -161,8 +171,8 @@ test("login administrativo consulta perfil e redireciona ao portal", async ({ pa
 test("restaura sessão administrativa diretamente na rota protegida", async ({ page }) => {
     const state = await setup(page);
     await page.goto("/admin");
-    await expect(page.getByRole("heading", { name: "Catálogo canônico" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Produtos publicados", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Visão geral", exact: true })).toBeVisible();
+    await expect(page.locator("#supplier-main-content").getByRole("link", { name: "Produtos publicados", exact: true })).toBeVisible();
     await expect(page.getByText("Total informado pela API: 0")).toBeVisible();
     expect(state.adminRequests.length).toBeGreaterThan(0);
     expect(state.adminRequests.every(path => path === "GET /api/v1/products")).toBe(true);
@@ -192,7 +202,7 @@ test("visão geral pagina o catálogo e calcula indicadores globais somente apó
 test("admin reutiliza o layout compartilhado nas quatro rotas e mantém somente a navegação autorizada", async ({ page }) => {
     await setup(page);
     const adminRoutes = [
-        ["/admin", "Catálogo canônico"],
+        ["/admin", "Visão geral"],
         ["/admin/products", "Produtos publicados"],
         ["/admin/products/new", "Cadastrar produto canônico"],
         ["/admin/account", "Minha conta"],
@@ -201,7 +211,8 @@ test("admin reutiliza o layout compartilhado nas quatro rotas e mantém somente 
         await page.goto(path);
         await expect(page.locator("[data-portal='admin']")).toBeVisible();
         await expect(page.locator(".supplier-sidebar")).toBeVisible();
-        await expect(page.locator(".supplier-topbar")).toContainText("Portal do administrador");
+        await expect(page.locator(".supplier-topbar")).toContainText("Painel administrativo");
+        await expect(page.locator(".supplier-topbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
         await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
     const sidebar = page.locator(".supplier-sidebar");
@@ -218,8 +229,13 @@ test("menu mobile administrativo mantém identidade e não exibe rotas comerciai
     await setup(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/admin");
+    const mobileBrand = page.locator(".supplier-mobile-toolbar").getByRole("img", { name: "RotaLog" });
+    await expect(mobileBrand).toBeVisible();
+    await expect(page.locator(".supplier-topbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
     await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
     const menu = page.getByRole("dialog", { name: "Menu do administrador" });
+    await expect(page.locator(".supplier-mobile-toolbar").getByRole("img", { name: "RotaLog" })).toHaveCount(0);
+    await expect(menu.getByRole("img", { name: "RotaLog" })).toBeVisible();
     await expect(menu.getByRole("link", { name: "Visão geral", exact: true })).toBeVisible();
     await expect(menu.getByRole("link", { name: "Cadastrar produto", exact: true })).toBeVisible();
     await expect(menu.getByRole("link", { name: "Minha conta", exact: true })).toHaveAttribute("href", "/admin/account");
@@ -234,7 +250,7 @@ test("menu e guards administrativos exigem catalog e escondem cadastro sem produ
     const state = await setup(page);
     state.capabilities = ["catalog:read"];
     await page.goto("/admin");
-    await expect(page.getByRole("heading", { name: "Catálogo canônico" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Visão geral", exact: true })).toBeVisible();
     await expect(page.locator(".supplier-sidebar").getByRole("link", { name: "Cadastrar produto", exact: true })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Cadastrar produto", exact: true })).toHaveCount(0);
     await page.goto("/admin/products");
@@ -250,7 +266,7 @@ test("menu e guards administrativos exigem catalog e escondem cadastro sem produ
     missingCatalog.capabilities = ["product:write"];
     await missingCatalogPage.goto("/admin");
     await expect(missingCatalogPage).toHaveURL(/\/login$/);
-    await expect(missingCatalogPage.getByRole("heading", { name: "Catálogo canônico" })).toHaveCount(0);
+    await expect(missingCatalogPage.getByRole("heading", { name: "Visão geral", exact: true })).toHaveCount(0);
     await missingCatalogPage.close();
 });
 

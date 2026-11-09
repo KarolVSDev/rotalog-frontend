@@ -21,7 +21,7 @@ import {
     OfferComparisonStatus,
 } from "./BuyerOfferComparison";
 import { useOfferComparison } from "./useBuyerOfferComparison";
-import { isPurchasableOffer } from "./buyerCatalog";
+import { filterAndSortBuyerProducts, isPurchasableOffer, type BuyerCatalogFilters } from "./buyerCatalog";
 import { BuyerReadRepository } from "./BuyerReadRepository";
 
 const button = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600";
@@ -132,8 +132,8 @@ function useRead<T>(load:()=>Promise<T>, dependencies: unknown[]) {
     },[...dependencies,revision]);
     return {value,error,loading,reload:()=>setRevision(value=>value+1)};
 }
-function Result({loading,error,reload,children}:{loading:boolean;error:string;reload:()=>void;children:ReactNode}) {
-    if(loading)return <div role="status" aria-live="polite" className={card}><p className="font-semibold text-blue-950">Carregando dados...</p><p className="mt-2 text-sm text-slate-500">Aguarde a consulta das informações atualizadas.</p></div>;
+function Result({loading,error,reload,children,loadingContent}:{loading:boolean;error:string;reload:()=>void;children:ReactNode;loadingContent?:ReactNode}) {
+    if(loading)return loadingContent ? <>{loadingContent}</> : <div role="status" aria-live="polite" className={card}><p className="font-semibold text-blue-950">Carregando dados...</p><p className="mt-2 text-sm text-slate-500">Aguarde a consulta das informações atualizadas.</p></div>;
     if(error)return <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5"><p className="font-semibold text-red-800">Não foi possível concluir a consulta</p><p className="mt-2 text-sm text-red-700">{error}</p><button className={`${button} mt-3`} onClick={reload}>Tentar novamente</button></div>;
     return <>{children}</>;
 }
@@ -154,61 +154,112 @@ function CatalogContent() {
     const [page,setPage]=useState(1);
     const [query,setQuery]=useState(search);
     const [category,setCategory]=useState("");
+    const [brand,setBrand]=useState("");
+    const [stock,setStock]=useState<BuyerCatalogFilters["stock"]>("any");
+    const [sort,setSort]=useState<BuyerCatalogFilters["sort"]>("recommended");
     const repository=useMemo(()=>new BuyerReadRepository(user!.organization_id!),[user]);
     // A search change resets pagination before issuing the next query.
     const actualPage=query===search?page:1;
     const result=useRead(()=>repository.availableCatalog(search,actualPage),[repository,user?.organization_id,actualPage,search]);
     const publishedProducts = result.value?.products.items ?? [];
     const categories = catalogCategories(publishedProducts);
+    const brands = [...new Set(publishedProducts.map(product => product.brand.trim()).filter(Boolean))]
+        .sort((left,right)=>left.localeCompare(right,"pt-BR"));
     const activeCategory = categories.includes(category) ? category : "";
-    const visibleProducts = publishedProducts.filter(product => !activeCategory || product.category === activeCategory);
+    const activeBrand = brands.includes(brand) ? brand : "";
+    const visibleProducts = filterAndSortBuyerProducts(publishedProducts,result.value?.offers??[],{
+        category:activeCategory,
+        brand:activeBrand,
+        stock,
+        sort,
+    });
+    const hasFilters = !!activeCategory || !!activeBrand || stock !== "any" || sort !== "recommended";
+    function clearFilters() {
+        setCategory("");
+        setBrand("");
+        setStock("any");
+        setSort("recommended");
+    }
     const demoDataVisible = authMode === "mock"
         ? visibleProducts.length > 0
         : visibleProducts.length > 0 &&
             areSyntheticRecords(visibleProducts) &&
             (result.value?.offers.length === 0 || areSyntheticRecords(result.value?.offers ?? []));
     return <div>
-        <header className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-[#102957] via-blue-900 to-blue-700 px-5 py-6 text-white sm:px-8 sm:py-8">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-200">Marketplace RotaLog</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Catálogo de produtos</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">Compare produtos e ofertas atuais de fornecedores para sua organização.</p>
-            <div className="mt-5 flex max-w-2xl items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 md:hidden">
-                <BuyerIcon name="search" className="h-5 w-5 shrink-0 text-blue-100"/>
-                <span className="min-w-0 text-sm text-blue-50">Use a busca no topo para encontrar produtos e fornecedores.</span>
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-[#102957] to-blue-800 px-5 py-4 text-white shadow-sm sm:px-6">
+            <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-200">Marketplace RotaLog</p>
+                <h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">Catálogo de produtos</h1>
+                <p className="mt-1 text-xs text-blue-100 sm:text-sm">Compare produtos e ofertas atuais de fornecedores.</p>
             </div>
-            <div className="mt-4"><DemoDataBadge visible={demoDataVisible}/></div>
+            <DemoDataBadge visible={demoDataVisible}/>
         </header>
-        <Result {...result}>
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                <div><h2 className="text-lg font-bold text-slate-900">Produtos disponíveis</h2><p className="mt-1 text-sm text-slate-500">Preços e disponibilidade confirmados nas ofertas atuais.</p></div>
-                <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600">{result.value?.products.total ?? 0} produto(s)</span>
-            </div>
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                <ProductCategoryFilter categories={categories} value={activeCategory} onChange={setCategory} label="Categoria nesta página"/>
-            </div>
-            {visibleProducts.length ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleProducts.map(product=>{
+        <Result {...result} loadingContent={
+            <section role="status" aria-live="polite" className="space-y-4">
+                <p className="font-semibold text-slate-700">Carregando produtos e ofertas...</p>
+                <div aria-hidden="true" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {[1,2,3,4].map(item=><div key={item} className="animate-pulse rounded-2xl border border-slate-200 bg-white p-3">
+                        <div className="aspect-[4/3] rounded-xl bg-slate-100"/>
+                        <div className="mt-4 h-3 w-1/3 rounded bg-slate-100"/>
+                        <div className="mt-3 h-5 w-4/5 rounded bg-slate-100"/>
+                        <div className="mt-2 h-4 w-1/2 rounded bg-slate-100"/>
+                        <div className="mt-6 h-7 w-2/5 rounded bg-slate-100"/>
+                    </div>)}
+                </div>
+            </section>
+        }>
+            <section aria-labelledby="buyer-products-title">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                    <div><h2 id="buyer-products-title" className="text-lg font-bold text-slate-900">Produtos disponíveis</h2><p className="mt-1 text-sm text-slate-500">Preços e disponibilidade das ofertas atuais.</p></div>
+                    <span aria-live="polite" className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 ring-1 ring-slate-200">{visibleProducts.length} produto(s) nesta página · {result.value?.products.total ?? 0} no catálogo</span>
+                </div>
+                <div role="group" aria-label="Filtros do catálogo" className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+                    <ProductCategoryFilter categories={categories} value={activeCategory} onChange={setCategory} label="Categoria"/>
+                    <label className="min-w-0 text-sm font-medium text-slate-700">Marca
+                        <select value={activeBrand} onChange={event=>setBrand(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                            <option value="">Todas as marcas</option>
+                            {brands.map(item=><option key={item} value={item}>{item}</option>)}
+                        </select>
+                    </label>
+                    <label className="min-w-0 text-sm font-medium text-slate-700">Disponibilidade
+                        <select value={stock} onChange={event=>setStock(event.target.value as BuyerCatalogFilters["stock"])} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                            <option value="any">Todas as ofertas compráveis</option>
+                            <option value="above-minimum">Estoque acima do pedido mínimo</option>
+                            <option value="at-minimum">Estoque no limite do pedido</option>
+                        </select>
+                    </label>
+                    <label className="min-w-0 text-sm font-medium text-slate-700">Ordenar por
+                        <select value={sort} onChange={event=>setSort(event.target.value as BuyerCatalogFilters["sort"])} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                            <option value="recommended">Recomendados</option>
+                            <option value="price-ascending">Menor preço</option>
+                            <option value="price-descending">Maior preço</option>
+                            <option value="name">Nome do produto</option>
+                        </select>
+                    </label>
+                    {hasFilters && <button type="button" onClick={clearFilters} className="justify-self-start rounded-lg px-2 py-1 text-sm font-semibold text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:col-span-2 lg:col-span-4">Limpar filtros</button>}
+                </div>
+            {visibleProducts.length ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{visibleProducts.map(product=>{
                 const offers=result.value!.offers.filter(offer=>offer.product_id===product.id && isPurchasableOffer(offer));
                 const cheapest=offers.reduce<Offer|undefined>((best,offer)=>!best||cents(offer.unit_price)<cents(best.unit_price)?offer:best,undefined);
                 const productUnit = product.packaging_type.trim();
-                const details = `${product.packaging_quantity} ${product.packaging_quantity === 1 ? "unidade" : "unidades"}${productUnit ? ` por ${productUnit.toLocaleLowerCase("pt-BR")}` : ""}`;
-                return <article className="group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-5" key={product.id}>
-                    <ProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name}/>
-                    <div className="mt-4 flex min-h-7 flex-wrap items-center justify-between gap-2">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="max-w-[65%] truncate text-xs font-medium text-slate-500">{product.brand || "Produto"}</span>
-                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800">{productCategory(product.category)}</span>
-                        </div>
-                        {cheapest ? <BuyerStatus tone="success" icon="check">Disponível</BuyerStatus> : <BuyerStatus tone="neutral" icon="clock">Sem oferta</BuyerStatus>}
+                const details = `${product.net_content} ${product.net_content_unit} · ${product.packaging_quantity} ${product.packaging_quantity === 1 ? "unidade" : "unidades"}${productUnit ? ` · ${productUnit}` : ""}`;
+                return <article className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-within:ring-2 focus-within:ring-blue-200" key={product.id}>
+                    <ProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name} className="aspect-[3/2] w-full bg-slate-50"/>
+                    <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-xs font-semibold text-slate-600">{product.brand || "Marca não informada"}</span>
+                        {cheapest && <BuyerStatus tone="success" icon="check">Disponível</BuyerStatus>}
                     </div>
-                    <h3 className="mt-3 min-h-12 text-base font-bold leading-6 text-slate-900">{product.name}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{details}</p>
-                    <div className="mt-auto pt-5">
-                        {cheapest ? <><p className="text-xs font-medium text-slate-500">Menor preço disponível</p><p className="mt-1 text-2xl font-bold tracking-tight text-blue-900">{money(cheapest.unit_price)}</p><p className="mt-1 text-xs text-slate-500">por {productUnit ? productUnit.toLocaleLowerCase("pt-BR") : "unidade comercial"}</p><p className="mt-1 text-xs text-slate-500">Oferta de {cheapest.supplier_name}</p></> : <p className="text-sm font-medium text-slate-600">Nenhuma oferta disponível no momento.</p>}
-                        <Link className={`${button} mt-5 w-full`} to={`/produto/${encodeURIComponent(product.id)}`}>Ver produto<BuyerIcon name="arrow-right" className="h-4 w-4"/></Link>
+                    <span className="mt-2 w-fit max-w-full truncate rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-800">{productCategory(product.category)}</span>
+                    <h3 className="mt-2 line-clamp-2 min-h-12 text-sm font-bold leading-5 text-slate-900">{product.name}</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{details}</p>
+                    <div className="mt-auto border-t border-slate-100 pt-3">
+                        {cheapest ? <><p className="text-[11px] font-medium text-slate-500">A partir de</p><p className="mt-0.5 text-2xl font-bold tracking-tight text-blue-900">{money(cheapest.unit_price)}</p><p className="text-xs text-slate-500">por {productUnit ? productUnit.toLocaleLowerCase("pt-BR") : "unidade comercial"}</p><p className="mt-2 truncate text-xs text-slate-600" title={cheapest.supplier_name}>Fornecedor: <span className="font-semibold text-slate-800">{cheapest.supplier_name}</span></p></> : <p className="text-sm font-medium text-slate-600">Nenhuma oferta disponível no momento.</p>}
+                        <Link className={`${button} mt-3 w-full`} to={`/produto/${encodeURIComponent(product.id)}`}>Ver produto<BuyerIcon name="arrow-right" className="h-4 w-4"/></Link>
                     </div>
                 </article>;
-            })}</div> : publishedProducts.length ? <BuyerEmptyState icon="search" title="Nenhum produto nesta categoria"><p>Escolha outra categoria para ver os produtos desta página.</p></BuyerEmptyState> : <BuyerEmptyState icon="search" title="Nenhum produto disponível para compra"><p>{search.trim() ? "Nenhum produto com oferta disponível corresponde à busca." : "Não há produtos publicados com ofertas disponíveis no momento."}</p></BuyerEmptyState>}
-            <Pager page={result.value?.products.page??actualPage} size={25} total={result.value?.products.total??0} onChange={next=>{setCategory("");setQuery(search);setPage(next);}}/>
+            })}</div> : result.value?.products.total ? <BuyerEmptyState icon="search" title="Nenhum produto corresponde aos filtros"><p>Tente ajustar ou limpar os filtros para ver outras ofertas desta página.</p><button type="button" onClick={clearFilters} className={`${secondaryButton} mt-4`}>Limpar filtros</button></BuyerEmptyState> : <BuyerEmptyState icon="search" title="Nenhum produto disponível para compra"><p>{search.trim() ? "Nenhum produto com oferta disponível corresponde à busca." : "Não há produtos publicados com ofertas disponíveis no momento."}</p></BuyerEmptyState>}
+            <Pager page={result.value?.products.page??actualPage} size={25} total={result.value?.products.total??0} onChange={next=>{clearFilters();setQuery(search);setPage(next);}}/>
+            </section>
         </Result>
     </div>;
 }

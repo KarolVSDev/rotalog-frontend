@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CatalogProduct } from "../../products/api/catalogRepository";
 import type { Offer } from "../../products/api/offersRepository";
 import { BuyerReadRepository } from "./BuyerReadRepository";
-import { buyerCatalogPage, isPurchasableOffer } from "./buyerCatalog";
+import { buyerCatalogPage, filterAndSortBuyerProducts, isPurchasableOffer } from "./buyerCatalog";
 import { validateCart, type Offer as CartOffer } from "./buyerRepository";
 
 function product(id: string, publication_state = "PUBLISHED"): CatalogProduct {
@@ -48,6 +48,45 @@ function offer(productId: string, overrides: Partial<Offer> = {}): Offer {
 }
 
 describe("buyer catalog eligibility", () => {
+    it("filters by category, brand, and offer stock and sorts without changing offer data", () => {
+        const products = [
+            { ...product("rice"), name: "Arroz", brand: "Marca A", category: "GRAOS" },
+            { ...product("beans"), name: "Feijão", brand: "Marca B", category: "GRAOS" },
+            { ...product("oil"), name: "Óleo", brand: "Marca A", category: "OLEOS" },
+        ];
+        const offers = [
+            offer("rice", { unit_price: "10.00", minimum_order_quantity: 2, available_quantity: 8 }),
+            offer("beans", { unit_price: "5.00", minimum_order_quantity: 2, available_quantity: 2 }),
+            offer("oil", { unit_price: "7.00", minimum_order_quantity: 1, available_quantity: 5 }),
+        ];
+
+        expect(filterAndSortBuyerProducts(products, offers, {
+            category: "GRAOS",
+            brand: "Marca A",
+            stock: "above-minimum",
+            sort: "recommended",
+        }).map(item => item.id)).toEqual(["rice"]);
+        expect(filterAndSortBuyerProducts(products, offers, {
+            category: "",
+            brand: "",
+            stock: "at-minimum",
+            sort: "recommended",
+        }).map(item => item.id)).toEqual(["beans"]);
+        expect(filterAndSortBuyerProducts(products, offers, {
+            category: "",
+            brand: "",
+            stock: "any",
+            sort: "price-ascending",
+        }).map(item => item.id)).toEqual(["beans", "oil", "rice"]);
+        expect(filterAndSortBuyerProducts(products, offers, {
+            category: "",
+            brand: "",
+            stock: "any",
+            sort: "name",
+        }).map(item => item.id)).toEqual(["rice", "beans", "oil"]);
+        expect(offers.map(item => item.unit_price)).toEqual(["10.00", "5.00", "7.00"]);
+    });
+
     it("only keeps published products with at least one active, priced, stock-available offer", () => {
         const products = [
             product("no-offer"),

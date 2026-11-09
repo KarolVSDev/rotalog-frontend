@@ -13,6 +13,7 @@ import { useCart } from "../../features/cart/hooks/useCart";
 import { BuyerIcon } from "../../features/buyer/components/BuyerVisuals";
 import { buyerAuthorized } from "../../features/services/apiAuth.service";
 import { authMode } from "../api/config";
+import { BrandLogo } from "./BrandLogo";
 
 function CartIcon() {
     return (
@@ -128,15 +129,10 @@ export function MarketplaceLayout() {
                     <Link
                         to="/"
                         onClick={closeMenu}
-                        className="flex shrink-0 items-center gap-2"
+                        aria-label="RotaLog — início"
+                        className="flex min-w-0 shrink-0 items-center"
                     >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700 text-base font-bold text-white">
-                            R
-                        </span>
-
-                        <span className="text-lg font-extrabold tracking-tight">
-                            RotaLog
-                        </span>
+                        <BrandLogo />
                     </Link>
 
                     <div className="mx-auto hidden w-full max-w-[440px] md:block">
@@ -147,7 +143,7 @@ export function MarketplaceLayout() {
                                     type="search"
                                     value={search}
                                     onChange={(event) => setSearch(event.target.value)}
-                                    placeholder="Buscar produtos ou fornecedores..."
+                                    placeholder="Buscar produtos, marcas ou fornecedores..."
                                     aria-label="Buscar produtos"
                                     className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
                                 />
@@ -201,7 +197,7 @@ export function MarketplaceLayout() {
                                 type="search"
                                 value={search}
                                 onChange={(event) => setSearch(event.target.value)}
-                                placeholder="Buscar produtos..."
+                                placeholder="Buscar produtos, marcas ou fornecedores..."
                                 aria-label="Buscar produtos"
                                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
                             />
