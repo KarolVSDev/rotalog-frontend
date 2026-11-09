@@ -238,21 +238,21 @@ function CatalogContent() {
                     </label>
                     {hasFilters && <button type="button" onClick={clearFilters} className="justify-self-start rounded-lg px-2 py-1 text-sm font-semibold text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:col-span-2 lg:col-span-4">Limpar filtros</button>}
                 </div>
-            {visibleProducts.length ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{visibleProducts.map(product=>{
+            {visibleProducts.length ? <div className="grid items-stretch grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{visibleProducts.map(product=>{
                 const offers=result.value!.offers.filter(offer=>offer.product_id===product.id && isPurchasableOffer(offer));
                 const cheapest=offers.reduce<Offer|undefined>((best,offer)=>!best||cents(offer.unit_price)<cents(best.unit_price)?offer:best,undefined);
                 const productUnit = product.packaging_type.trim();
                 const details = `${product.net_content} ${product.net_content_unit} · ${product.packaging_quantity} ${product.packaging_quantity === 1 ? "unidade" : "unidades"}${productUnit ? ` · ${productUnit}` : ""}`;
-                return <article className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-within:ring-2 focus-within:ring-blue-200" key={product.id}>
-                    <ProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name} className="aspect-[3/2] w-full bg-slate-50"/>
-                    <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
+                return <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-within:ring-2 focus-within:ring-blue-200" key={product.id}>
+                    <ProductImage productId={product.id} image={product.primary_image ?? product.images?.find(image => image.is_primary)} name={product.name} className="h-40 w-full bg-white sm:h-48"/>
+                    <div className="mt-2 flex min-h-6 min-w-0 items-center justify-between gap-2">
                         <span className="min-w-0 truncate text-xs font-semibold text-slate-600">{product.brand || "Marca não informada"}</span>
                         {cheapest && <BuyerStatus tone="success" icon="check">Disponível</BuyerStatus>}
                     </div>
-                    <span className="mt-2 w-fit max-w-full truncate rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-800">{productCategory(product.category)}</span>
-                    <h3 className="mt-2 line-clamp-2 min-h-12 text-sm font-bold leading-5 text-slate-900">{product.name}</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{details}</p>
-                    <div className="mt-auto border-t border-slate-100 pt-3">
+                    <span className="mt-1 w-fit max-w-full truncate rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-800">{productCategory(product.category)}</span>
+                    <h3 title={product.name} className="mt-1 line-clamp-2 min-h-10 [overflow-wrap:anywhere] text-sm font-bold leading-5 text-slate-900">{product.name}</h3>
+                    <p className="mt-1 min-h-8 text-xs leading-4 text-slate-500">{details}</p>
+                    <div className="mt-auto border-t border-slate-100 pt-2">
                         {cheapest ? <><p className="text-[11px] font-medium text-slate-500">A partir de</p><p className="mt-0.5 text-2xl font-bold tracking-tight text-blue-900">{money(cheapest.unit_price)}</p><p className="text-xs text-slate-500">por {productUnit ? productUnit.toLocaleLowerCase("pt-BR") : "unidade comercial"}</p><p className="mt-2 truncate text-xs text-slate-600" title={cheapest.supplier_name}>Fornecedor: <span className="font-semibold text-slate-800">{cheapest.supplier_name}</span></p></> : <p className="text-sm font-medium text-slate-600">Nenhuma oferta disponível no momento.</p>}
                         <Link className={`${button} mt-3 w-full`} to={`/produto/${encodeURIComponent(product.id)}`}>Ver produto<BuyerIcon name="arrow-right" className="h-4 w-4"/></Link>
                     </div>
