@@ -6,6 +6,7 @@ import { useApiPendingOrders } from "../../features/orders/api/ordersContext";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Link,
   Outlet,
   useLocation,
   useNavigate,
@@ -16,6 +17,7 @@ import { getSupplierOrders, subscribeSupplierOrders } from "../../features/order
 import { Sidebar } from "./Sidebar";
 import { SupplierHeader } from "./SupplierHeader";
 import { SupplierDevControls } from "./SupplierDevControls";
+import { BrandLogo } from "./BrandLogo";
 import { useLogout } from "../../features/auth/hooks/useLogout";
 
 import { usersMock } from "../../features/auth/mocks/users.mock";
@@ -251,7 +253,8 @@ export function AppLayout({ portal = "supplier", outletContext }: AppLayoutProps
       <div className="flex min-w-0 flex-1 flex-col">
         <SupplierHeader portalTitle={portalTitle} roleLabel={roleLabel} accountPath={accountPath ?? null} name={sessionUser?.name ?? activeUser.name} organization={activeOrganization.name} onLogout={()=>void logout()}/>
         {/* Botão do menu mobile */}
-        <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+        <div className="supplier-mobile-toolbar border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+          {!menuOpen && <Link to={homePath} aria-label="RotaLog — início" className="supplier-mobile-brand"><BrandLogo/></Link>}
           <button
             ref={menuTriggerRef}
             type="button"

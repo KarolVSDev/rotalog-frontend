@@ -3,6 +3,8 @@ import {Link, useLocation} from "react-router-dom";
 import {SupplierIcon} from "./SupplierVisuals";
 
 export function SupplierHeader({name, organization, onLogout, portalTitle = "Portal do fornecedor", roleLabel = "Fornecedor", accountPath = "/fornecedor/conta"}: {name: string; organization: string; onLogout: () => void; portalTitle?: string; roleLabel?: string; accountPath?: string | null}) {
+    const isAdmin = roleLabel === "Administrador";
+    const headerTitle = isAdmin ? "Painel administrativo" : portalTitle;
     const details = useRef<HTMLDetailsElement>(null);
     const summary = useRef<HTMLElement>(null);
     const {pathname} = useLocation();
@@ -18,7 +20,7 @@ export function SupplierHeader({name, organization, onLogout, portalTitle = "Por
         return () => {document.removeEventListener("click", close); document.removeEventListener("keydown", close);};
     }, []);
     return <header className="supplier-topbar">
-        <span className="supplier-topbar-caption">{portalTitle}</span>
+        <div className="supplier-topbar-heading"><span>{headerTitle}</span></div>
         <details ref={details} className="supplier-profile">
             <summary ref={summary} aria-label="Abrir perfil do usuário" className="supplier-profile-trigger"><span className="supplier-avatar" aria-hidden="true">{initials}</span><span className="supplier-profile-copy"><strong>{name}</strong><span>{organization} · {roleLabel}</span></span><span aria-hidden="true">⌄</span></summary>
             <div className="supplier-profile-panel"><p className="text-xs text-slate-500">Sua sessão</p><p className="mt-1 break-words font-semibold">{name}</p>{accountPath && <Link to={accountPath}><SupplierIcon name="account"/>Minha conta</Link>}<button type="button" onClick={onLogout} className="text-red-700">Sair da conta</button></div>
